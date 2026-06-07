@@ -8,7 +8,10 @@
   outputs = { self, nixpkgs, utils, naersk }:
     utils.lib.eachDefaultSystem (system:
       let
-        pkgs = import nixpkgs { inherit system; };
+        pkgs = import nixpkgs { 
+          inherit system;
+          config.allowUnfree = true;
+        };
         naersk-lib = pkgs.callPackage naersk { };
       in
       {
@@ -16,10 +19,11 @@
         devShell = with pkgs; mkShell rec {
           buildInputs = [ cargo rustc rustfmt pre-commit rustPackages.clippy
           ];
+
           packages = with pkgs; [
             cmake pkg-config cfitsio libclang.lib
-            llvmPackages.libcxxClang
-            clang rust-analyzer
+            llvmPackages.libcxxClang llvmPackages.clangUseLLVM
+            rust-analyzer gcc
             glib
             libGL
             fontconfig
@@ -27,7 +31,18 @@
             wayland
             dbus
             freetype
+            gsl
+            fftw
+            fftwFloat
+            ncurses
+            readline
+            bison
+            flex
+            openblas
           ];
+          shellHook = ''
+            source .venv/bin/activate
+          '';
           RUST_SRC_PATH = rustPlatform.rustLibSrc;
           LIBCLANG_PATH = "${libclang.lib}/lib";
           MILK_SHM_DIR = "/dev/shm";

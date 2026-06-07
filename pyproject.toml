@@ -4,7 +4,12 @@ version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
     "astropy>=7.2.0",
+    "pybind11>=3.0.4",
+    "pymilk",
     "pyqt5>=5.15.11",
     "shmview>=0.0.10",
     "xaosim>=1.0.11",
 ]
+
+[tool.uv.sources]
+pymilk = { git = "https://github.com/milk-org/pyMilk.git" }

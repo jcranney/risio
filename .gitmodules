@@ -1,0 +1,3 @@
+[submodule "libImageStreamIO"]
+	path = libImageStreamIO
+	url = https://github.com/milk-org/ImageStreamIO

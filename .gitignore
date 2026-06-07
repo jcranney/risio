@@ -1,4 +1,5 @@
-/target
+target/
+result
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -12,7 +13,6 @@ __pycache__/
 .Python
 .venv/
 env/
-bin/
 build/
 develop-eggs/
 dist/
@@ -70,3 +70,17 @@ docs/_build/
 
 # Pyenv
 .python-version
+
+
+# Added by cargo
+#
+# already existing elements were commented out
+
+#/target
+
+
+# Added by cargo
+#
+# already existing elements were commented out
+
+#/target

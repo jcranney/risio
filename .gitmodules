@@ -1,3 +1,4 @@
 [submodule "libmilk"]
 	path = libmilk
 	url = git@github.com:jcranney/milk.git
+	branch = dev

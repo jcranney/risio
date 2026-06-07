@@ -7669,7 +7669,7 @@ pub struct IMAGE_METADATA {
     pub cnt0: u64,
     #[doc = "< in 3D rolling buffer image, this is the last slice written"]
     pub cnt1: u64,
-    #[doc = "< in event mode, this is the # of events"]
+    #[doc = "< in cnt2-based syncronization, proceed until cnt0=cnt2"]
     pub cnt2: u64,
     #[doc = "< 1 if image is being written"]
     pub write: u8,

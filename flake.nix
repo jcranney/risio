@@ -13,9 +13,25 @@
       in
       {
         defaultPackage = naersk-lib.buildPackage ./.;
-        devShell = with pkgs; mkShell {
-          buildInputs = [ cargo rustc rustfmt pre-commit rustPackages.clippy ];
+        devShell = with pkgs; mkShell rec {
+          buildInputs = [ cargo rustc rustfmt pre-commit rustPackages.clippy
+          ];
+          packages = with pkgs; [
+            cmake pkg-config cfitsio libclang.lib
+            llvmPackages.libcxxClang
+            clang rust-analyzer
+            glib
+            libGL
+            fontconfig
+            libxkbcommon
+            wayland
+            dbus
+            freetype
+          ];
           RUST_SRC_PATH = rustPlatform.rustLibSrc;
+          LIBCLANG_PATH = "${libclang.lib}/lib";
+          MILK_SHM_DIR = "/dev/shm";
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath packages;
         };
       }
     );

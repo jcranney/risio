@@ -3,4 +3,12 @@ name = "risio"
 version = "0.1.0"
 edition = "2024"
 
+[build-dependencies]
+cmake = "0.1.58"
+bindgen = "0.72.1"
+
 [dependencies]
+anyhow = "1.0.102"
+num-complex = "0.4.6"
+thiserror = "2.0.18"
+

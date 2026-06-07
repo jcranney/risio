@@ -1,3 +1,3 @@
 [submodule "libmilk"]
 	path = libmilk
-	url = git@github.com:milk-org/milk.git
+	url = git@github.com:jcranney/milk.git

@@ -8,11 +8,15 @@ fn main() {
     println!("cargo:rustc-link-lib=static=milkCOREMODiofits");
     println!("cargo:rustc-link-lib=static=milkCOREMODmemory");
     println!("cargo:rustc-link-lib=static=milkCOREMODtools");
+    println!("cargo:rustc-link-lib=static=CLIcore");
+    println!("cargo:rustc-link-lib=dylib=cfitsio");
+    println!("cargo:rustc-link-lib=dylib=ncurses");
     
     // Generate bindings with bindgen
     let bindings = bindgen::Builder::default()
         .clang_arg("-Ilibmilk/src")
         .header("./libmilk/src/CommandLineInterface/CLIcore.h")
+        .header("./libmilk/src/COREMOD_memory/list_image.h")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");

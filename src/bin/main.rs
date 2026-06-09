@@ -1,4 +1,4 @@
-use risio::{Image, ImageType, ValidImage};
+use risio::{DataType, Image, ImageType, ValidImage, bindings::IMGID};
 
 fn main() {
     // let mut image = Image::<f64>::read_sharedmem_image("shmim_from_rust", &[10, 10]).unwrap();
@@ -6,20 +6,11 @@ fn main() {
     // image.array()[1] += 0.1;
     // println!("{:?}", image.array());
     // println!("hello risio!");
-
-    let mut image = Image::<f64>::create_image(
-        "shmim_from_rust",
-        2,
-        &[1000, 1000],
-        -1,
-        true,
-        0,
-        10,
-        ImageType::default(),
-        1,
-    )
-    .unwrap();
-    for (i,element) in image.array().iter_mut().enumerate() {
+    let mut img = unsafe {
+        IMGID::stream_connect_create_2D("shmim_from_rust", 1000, 1000, DataType::F64).unwrap()
+    };
+    let array = img.array_f64();
+    for (i, element) in array.iter_mut().enumerate() {
         *element += i as f64;
     }
 }

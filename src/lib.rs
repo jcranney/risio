@@ -1,10 +1,11 @@
 pub mod bindings;
-use crate::bindings::IMAGE;
+use crate::bindings::{IMAGE, IMGID, errno_t};
 use anyhow::Result;
 use std::ffi::CString;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use thiserror::Error;
+
 
 #[derive(Error, Debug)]
 pub enum RisioError {
@@ -257,7 +258,7 @@ pub trait ValidImage<T> {
         let mut size_internal: Vec<u32> = size.into();
         let mut image = std::mem::MaybeUninit::uninit();
         let name_c = CString::new(name)?;
-        unsafe {
+        let _err = unsafe {
             bindings::ImageStreamIO_createIm_gpu(
                 image.as_mut_ptr(),
                 name_c.as_ptr(),
@@ -271,7 +272,7 @@ pub trait ValidImage<T> {
                 u64::from(image_type),
                 cb_size,
             );
-        }
+        };
         let image = unsafe { image.assume_init() };
 
         Ok(Image {
@@ -400,6 +401,255 @@ impl ValidImage<num_complex::Complex64> for Image<num_complex::Complex64> {
     fn array(&self) -> &mut [num_complex::Complex64] {
         unimplemented!()
     }
+}
+
+impl bindings::IMGID {
+    pub fn array_f64(&mut self) -> &mut [f64] {
+        unsafe { core::slice::from_raw_parts_mut((*self.im).array.D, 10) }
+    }
+
+    fn create(name: &str, shape: Vec<usize>, shared: bool, datatype: DataType) -> Result<Self> {
+        let name_c = &mut [0; bindings::STRINGMAXLEN_IMAGE_NAME as usize];
+        for (i, char_i) in name.chars().enumerate() {
+            name_c[i] = char_i as i8;
+        }
+
+        let mut img = IMGID {
+            ID: -1,
+            createcnt: -1,
+            name: *name_c,
+            im: std::ptr::null_mut(),
+            md: std::ptr::null_mut(),
+            datatype: datatype as u8,
+            naxis: shape.len() as i32,
+            size: [shape[0] as u32, shape[1] as u32, shape[2] as u32],
+            shared: shared as i32,
+            NBkw: bindings::NB_KEYWNODE_MAX as i32,
+            CBsize: 0,
+        };
+        unsafe { img.resolve_img_id(ErrMode::WARN) };
+        Ok(img)
+    }
+
+    /** @brief Resolve image already in memory
+     *
+     *
+     *
+     * ERRMODE values
+     * ERRMODE_WARN : print warning
+     * ERRMODE_FAIL : error
+     * ERRMODE_ABORT : abort
+     */
+    unsafe fn resolve_img_id(&mut self, errmode: ErrMode) -> bindings::imageID { unsafe {
+        // IF:
+        // Not resolved before OR create counter mismatch OR not used.
+        // Note: we are comparing img->createcnt to data.image[img->ID].createcnt to check if the
+        // image has been re-created, indicating that our pointers are stale.
+        let mut data_image = unsafe { *bindings::data.image.wrapping_add(self.ID as usize) };
+        if (self.ID == -1) || (self.createcnt != data_image.createcnt) || (data_image.used != 1) {
+            self.ID = unsafe { bindings::image_ID(self.name.as_ptr()) };
+            if self.ID > -1
+            // Resolve success !
+            {
+                self.im = &mut data_image;
+                self.md = data_image.md;
+                self.createcnt = data_image.createcnt;
+
+                // Populate the IMGID from the imageID metadata
+                self.update_img_id_creationparams();
+            }
+        }
+
+        // if still unresolved
+        //
+        if self.ID == -1 {
+            match errmode {
+                ErrMode::FAIL | ErrMode::ABORT => {
+                    eprintln!("Cannot resolve image {:?}\n", self.name);
+                    unsafe { bindings::abort() };
+                }
+                ErrMode::WARN => {
+                    eprintln!("Cannot resolve image {:?}\n", self.name);
+                }
+                ErrMode::NULL => (),
+            }
+        }
+
+        return self.ID;
+    }}
+
+    unsafe fn update_img_id_creationparams(&mut self) -> bindings::errno_t {
+        unsafe {
+            self.datatype = (*self.md).datatype;
+            self.naxis = (*self.md).naxis as i32;
+            for ii in 0..3 {
+                self.size[ii] = (*self.md).size[ii];
+            }
+            self.shared = (*self.md).shared as i32;
+            self.NBkw = (*self.md).NBkw as i32;
+            self.CBsize = (*self.md).CBsize as i32;
+        }
+
+        return bindings::RETURN_SUCCESS as i32;
+    }
+
+    pub unsafe fn stream_connect_create_2D(
+        name: &str,
+        xsize: usize,
+        ysize: usize,
+        datatype: DataType,
+    ) -> Result<Self> { unsafe {
+        let mut img: Self = Self::create(name, vec![xsize, ysize, 0], true, datatype)?;
+        unsafe { img.resolve_img_id(ErrMode::WARN) };
+
+        if img.ID == -1 {
+            // try to connect to shared memory if not in local memory already
+            unsafe { bindings::read_sharedmem_image(img.name.as_ptr()) };
+            unsafe { img.resolve_img_id(ErrMode::WARN) };
+        }
+
+        if img.ID != -1 {
+            // if in local memory,
+            // create blank img for comparison
+            let mut imgc: bindings::IMGID = Self::make_blank();
+            imgc.datatype = datatype as u8;
+            imgc.naxis = 2;
+            imgc.size[0] = xsize as u32;
+            imgc.size[1] = ysize as u32;
+            imgc.NBkw = bindings::NB_KEYWNODE_MAX as i32;
+            let err = img.compare(&imgc);
+            println!("{} errors", err);
+
+            // if doesn't pass test, erase from local memory
+            if err != 0 {
+                unsafe {
+                    bindings::delete_image_ID(
+                        img.name.as_ptr(),
+                        bindings::DELETE_IMAGE_ERRMODE_WARNING as i32,
+                    )
+                };
+                img.ID = -1;
+            }
+        }
+
+        // if not in local memory, (re)-create
+        if img.ID == -1 {
+            Self::create(name, vec![xsize, ysize], true, datatype)?;
+        }
+
+        if img.ID != -1 {
+            let id: bindings::imageID = img.ID;
+            img.im = unsafe { bindings::data.image.wrapping_add(id as usize) };
+            img.md = (unsafe { *img.im }).md;
+            img.createcnt = (unsafe { *img.im }).createcnt;
+            img.update_creation_params();
+        }
+
+        return Ok(img);
+    }}
+
+    fn make_blank() -> Self {
+        IMGID {
+            ID: -1,
+            createcnt: -1,
+            name: [0; bindings::STRINGMAXLEN_IMAGE_NAME as usize],
+            im: std::ptr::null_mut(),
+            md: std::ptr::null_mut(),
+            datatype: bindings::_DATATYPE_UNINITIALIZED as u8,
+            naxis: -1,
+            size: [0; 3],
+            shared: -1,
+            NBkw: -1,
+            CBsize: -1,
+        }
+    }
+
+    fn compare(&self, other: &Self) -> u64 {
+        let mut comp_err = 0;
+
+        if other.datatype != bindings::_DATATYPE_UNINITIALIZED as u8 {
+            print!("Checking datatype       ");
+            if other.datatype != self.datatype {
+                println!("FAIL");
+                comp_err += 1;
+            } else {
+                println!("PASS");
+            }
+        }
+
+        if other.naxis != -1 {
+            print!("Checking naxis  {} {}    ", other.naxis, self.naxis);
+            if other.naxis != self.naxis  {
+                println!("FAIL");
+                comp_err += 1;
+            } else {
+                println!("PASS");
+            }
+        }
+
+        if other.size[0] != 0 {
+            print!("Checking size[0]        ");
+            if other.size[0] != self.size[0]  {
+                println!("FAIL");
+                comp_err += 1;
+            } else {
+                println!("PASS");
+            }
+        }
+
+        if other.size[1] != 0 {
+            print!("Checking size[1]        ");
+            if other.size[1] != self.size[1]  {
+                println!("FAIL");
+                comp_err += 1;
+            } else {
+                println!("PASS");
+            }
+        }
+
+        if other.size[2] != 0 {
+            print!("Checking size[2]        ");
+            if other.size[2] != self.size[2]  {
+                println!("FAIL");
+                comp_err += 1;
+            } else {
+                println!("PASS");
+            }
+        }
+
+        print!("Checking NBkw           ");
+        if other.NBkw != self.NBkw {
+            println!("FAIL");
+            print!("   {:4}  {:?}\n", other.NBkw, other.name);
+            print!("   {:4}  {:?}\n", self.NBkw, self.name);
+            comp_err += 1;
+        } else {
+            println!("PASS");
+        }
+
+        comp_err
+    }
+
+    unsafe fn update_creation_params(&mut self) -> errno_t {
+        let md = unsafe { *self.md };
+        self.datatype = md.datatype;
+        self.naxis = md.naxis as i32;
+        for ii in 0..3 {
+            self.size[ii] = md.size[ii];
+        }
+        self.shared = md.shared as i32;
+        self.NBkw = md.NBkw as i32;
+        self.CBsize = md.CBsize as i32;
+
+        bindings::RETURN_SUCCESS as i32
+    }
+}
+
+pub enum ErrMode {
+    NULL = 0,
+    WARN,
+    FAIL,
+    ABORT,
 }
 
 #[cfg(test)]

@@ -9,6 +9,13 @@ bindgen = "0.72.1"
 
 [dependencies]
 anyhow = "1.0.102"
+enum-iterator = "2.3.0"
+libc = "0.2.186"
 num-complex = "0.4.6"
 thiserror = "2.0.18"
 
+[[bin]]
+name = "example_gol"
+
+[[bin]]
+name = "example_thread"

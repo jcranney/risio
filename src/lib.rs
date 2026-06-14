@@ -1,18 +1,96 @@
 pub mod bindings;
 use crate::bindings::IMAGE;
-use anyhow::Result;
-use std::ffi::CString;
+use std::ffi::{CString, NulError};
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use thiserror::Error;
+use enum_iterator::{all, Sequence};
 
 #[derive(Error, Debug)]
 pub enum RisioError {
-    #[error("Core ImageStreamIO library error: {0}")]
+    #[error(
+        "SHM object {name} already exists with different shape: {:?}, requested: {:?}",
+        existing,
+        requested
+    )]
+    ShmExistsWithOtherShape {
+        name: String,
+        existing: [u32; 3],
+        requested: [u32; 3],
+    },
+    #[error(
+        "SHM object {name} already exists with different type: {:?}, requested: {:?}",
+        existing,
+        requested
+    )]
+    ShmExistsWithOtherType { name: String, existing: DataType, requested: DataType },
+    #[error("Inavlid shape. Must have at most 3 axes. You requested {0}")]
+    InvalidShape(usize),
+    #[error("Core ImageStreamIO library error, unknown code: {0}")]
     ImageStreamIOError(i32),
+    #[error("Name contains NULL bit pattern. {}", err.as_display())]
+    InvalidName { err: NulError },
+    #[error("Bad data type for existing object: {datatype}")]
+    BadDataType{datatype: u8},
+    #[error("Core ImageStreamIO Error: Success")]
+    Success,
+    #[error("Core ImageStreamIO Error: Failure")]
+    Failure,
+    #[error("Core ImageStreamIO Error: InvalidArg")]
+    InvalidArg,
+    #[error("Core ImageStreamIO Error: NotImpl")]
+    NotImpl,
+    #[error("Core ImageStreamIO Error: BadAlloc")]
+    BadAlloc,
+    #[error("Core ImageStreamIO Error: FileOpen")]
+    FileOpen,
+    #[error("Core ImageStreamIO Error: FileSeek")]
+    FileSeek,
+    #[error("Core ImageStreamIO Error: FileWrite")]
+    FileWrite,
+    #[error("Core ImageStreamIO Error: FileExists")]
+    FileExists,
+    #[error("Core ImageStreamIO Error: Inode   ")]
+    Inode,
+    #[error("Core ImageStreamIO Error: Mmap")]
+    Mmap,
+    #[error("Core ImageStreamIO Error: SemInit")]
+    SemInit,
+    #[error("Core ImageStreamIO Error: Version")]
+    Version,
 }
 
-#[derive(Debug, Clone, Copy)]
+impl From<NulError> for RisioError {
+    fn from(value: NulError) -> Self {
+        RisioError::InvalidName { err: value }
+    }
+}
+
+impl RisioError {
+    fn errno_to_error(value: i32) -> Result<(), Self> {
+        match value {
+            0 => Ok(()),
+            x => Err((match x {
+                1 => RisioError::Failure,
+                10 => RisioError::InvalidArg,
+                20 => RisioError::NotImpl,
+                30 => RisioError::BadAlloc,
+                40 => RisioError::FileOpen,
+                42 => RisioError::FileSeek,
+                44 => RisioError::FileWrite,
+                46 => RisioError::FileExists,
+                48 => RisioError::Inode,
+                50 => RisioError::Mmap,
+                60 => RisioError::SemInit,
+                100 => RisioError::Version,
+                _ => RisioError::ImageStreamIOError(x),
+            })
+            .into()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Sequence, PartialEq)]
 pub enum DataType {
     U8 = 1, // uint8_t
     I8,     // int8_t
@@ -27,6 +105,19 @@ pub enum DataType {
     C64,    // complex_float
     C128,   // complex double
     F16,    // half precision floating-point
+}
+
+impl TryFrom<u8> for DataType {
+    fn try_from(value: u8) -> Result<Self, RisioError> {
+        for dt in all::<DataType>().collect::<Vec<DataType>>() {
+            if dt as u8 == value {
+                return Ok(dt);
+            }
+        }
+        Err(RisioError::BadDataType{ datatype: value })
+    }
+    
+    type Error = RisioError;
 }
 
 /// From ImageStreamIO: ImageStruct.h:
@@ -144,83 +235,142 @@ impl Debug for IMAGE {
 pub struct Image<T> {
     image: IMAGE,
     _data_type: PhantomData<T>,
-    shape: Vec<u32>,
+    shape: [u32; 3],
 }
 
 impl<T: ValidImageType<T>> Image<T> {
-    pub fn destroy_im(mut self) -> Result<()> {
-        match unsafe { bindings::ImageStreamIO_destroyIm(&mut self.image) } {
-            0 => Ok(()),
-            err => Err(RisioError::ImageStreamIOError(err).into()),
-        }
+    pub fn destroy_im(mut self) -> Result<(), RisioError> {
+        let err = unsafe { bindings::ImageStreamIO_destroyIm(&mut self.image) };
+        RisioError::errno_to_error(err)
+    }
+
+    pub fn destroy_by_name(name: &str) -> Result<(), RisioError> {
+        let mut image = unsafe { Self::force_read_sharedmem_image(name)}?;
+        let err = unsafe { bindings::ImageStreamIO_destroyIm(&mut image)};
+        RisioError::errno_to_error(err)
     }
 
     // pub fn ImageStreamIO_openIm(image: *mut IMAGE, name: *const ::std::os::raw::c_char) -> errno_t;
 
     // pub fn ImageStreamIO_get_image_d_ptr(image: *mut IMAGE) -> *mut ::std::os::raw::c_void;
 
-    pub fn read_or_create(name: &str, shape: &[u32]) -> Result<Self> {
-        match Self::read_sharedmem_image(name, shape) {
-            Ok(res) => return Ok(res),
-            Err(e) => eprintln!("Could not read {name} with shape: {:?}\n{e}", shape),
-        }
-        Ok(Self::create_image(
-            name,
-            shape.len() as i64,
-            shape,
-            -1,
-            true,
-            bindings::IMAGE_NB_SEMAPHORE as i32,
-            bindings::NB_KEYWNODE_MAX as i32,
-            ImageType::default(),
-            0,
-        )?)
+    pub fn read_or_create(name: &str, shape: &[u32]) -> Result<Self, RisioError> {
+        let shape = Self::validate_shape(shape)?;
+
+        return match Self::read_sharedmem_image(name, &shape) {
+            Ok(image) => Ok(image),
+            Err(RisioError::FileOpen) => {
+                // Doesn't exist, so we can create it:
+                return Ok(unsafe {
+                    Self::create_image(
+                        name,
+                        shape.len() as i64,
+                        shape,
+                        -1,
+                        true,
+                        bindings::IMAGE_NB_SEMAPHORE as i32,
+                        10,
+                        ImageType::default(),
+                        0,
+                    )
+                }?);
+            }
+            Err(e) => return Err(e),
+        };
     }
 
-    /// todo: extract shape from IMAGE object
-    pub fn read_sharedmem_image(name: &str, shape: &[u32]) -> Result<Self> {
+    fn validate_shape(shape: &[u32]) -> Result<[u32; 3], RisioError> {
+        let shape = match shape.len() {
+            0 => [1; 3],
+            1 => [shape[0], 1, 1],
+            2 => [shape[0], shape[1], 1],
+            3 => [shape[0], shape[1], shape[2]],
+            len => return Err(RisioError::InvalidShape(len).into()),
+        };
+        Ok(shape)
+    }
+
+    unsafe fn force_read_sharedmem_image(name: &str) -> Result<IMAGE, RisioError> {
         let name_c = CString::new(name)?;
         let mut image = std::mem::MaybeUninit::uninit();
 
-        unsafe {
+        let err = unsafe {
             bindings::ImageStreamIO_read_sharedmem_image_toIMAGE(
                 name_c.as_ptr(),
                 image.as_mut_ptr(),
             )
         };
+        RisioError::errno_to_error(err)?;
         let image = unsafe { image.assume_init() };
+        Ok(image)
+    }
+
+    /// todo: extract shape from IMAGE object
+    pub fn read_sharedmem_image(name: &str, shape: &[u32]) -> Result<Self, RisioError> {
+        let shape = Self::validate_shape(shape)?;
+        let name_c = CString::new(name)?;
+        let mut image = std::mem::MaybeUninit::uninit();
+
+        let err = unsafe {
+            bindings::ImageStreamIO_read_sharedmem_image_toIMAGE(
+                name_c.as_ptr(),
+                image.as_mut_ptr(),
+            )
+        };
+        RisioError::errno_to_error(err)?;
+        let image = unsafe { image.assume_init() };
+
+        let existing_shape = unsafe { *image.md }.size;
+        if existing_shape != shape {
+            return Err(RisioError::ShmExistsWithOtherShape {
+                name: name.to_string(),
+                existing: existing_shape,
+                requested: shape,
+            });
+        }
+
+        let existing_type: DataType = unsafe { *image.md }.datatype.try_into()?;
+        if existing_type != T::get_data_type() {
+            return Err(RisioError::ShmExistsWithOtherType {
+                name: name.to_string(),
+                existing: existing_type,
+                requested: T::get_data_type(),
+            });
+        }
+
         Ok(Self {
             image,
             _data_type: PhantomData,
-            shape: shape.into(),
+            shape: shape,
         })
     }
 
     // pub fn ImageStreamIO_closeIm(image: *mut IMAGE) -> errno_t;
 
-    pub fn sempost(&mut self, index: i64) -> i64 {
-        unsafe { bindings::ImageStreamIO_sempost(&mut self.image, index) }
+    pub fn sempost(&mut self, index: i64) -> Result<(), RisioError> {
+        let err = unsafe { bindings::ImageStreamIO_sempost(&mut self.image, index) };
+        RisioError::errno_to_error(err as i32)
     }
 
     pub fn array(&self) -> &mut [T] {
-        T::access_array(&self)
+        unsafe { T::access_array(&self) }
     }
 
-    fn create_image(
+    pub unsafe fn create_image(
         name: &str,
         naxis: i64,
-        size: &[u32],
+        size: [u32; 3],
         location: i8,
         shared: bool,
         nb_sem: i32,
         nb_kw: i32,
         image_type: ImageType,
         cb_size: u32,
-    ) -> Result<Image<T>> {
+    ) -> Result<Image<T>, RisioError> {
         let mut size_internal: Vec<u32> = size.into();
         let mut image = std::mem::MaybeUninit::uninit();
         let name_c = CString::new(name)?;
-        unsafe {
+        let err = unsafe {
             bindings::ImageStreamIO_createIm_gpu(
                 image.as_mut_ptr(),
                 name_c.as_ptr(),
@@ -233,20 +383,22 @@ impl<T: ValidImageType<T>> Image<T> {
                 nb_kw,
                 u64::from(image_type),
                 cb_size,
-            );
-        }
+            )
+        };
+        RisioError::errno_to_error(err)?;
         let image = unsafe { image.assume_init() };
 
         Ok(Image {
             image,
             _data_type: PhantomData,
-            shape: size.into(),
+            shape: size,
         })
     }
-    // pub fn ImageStreamIO_sempost(
-    //     image: *mut IMAGE,
-    //     index: ::std::os::raw::c_long,
-    // ) -> ::std::os::raw::c_long;
+
+    pub fn semwait(&mut self, index: i64) -> Result<(), RisioError> {
+        let err = unsafe { bindings::ImageStreamIO_semwait(&mut self.image, index as i32) };
+        RisioError::errno_to_error(err)
+    }
 
     // pub fn ImageStreamIO_sempost_excl(
     //     image: *mut IMAGE,
@@ -264,11 +416,6 @@ impl<T: ValidImageType<T>> Image<T> {
     //     semindexdefault: ::std::os::raw::c_int,
     // ) -> ::std::os::raw::c_int;
 
-    // pub fn ImageStreamIO_semwait(
-    //     image: *mut IMAGE,
-    //     index: ::std::os::raw::c_int,
-    // ) -> ::std::os::raw::c_int;
-
     // pub fn ImageStreamIO_semtrywait(
     //     image: *mut IMAGE,
     //     index: ::std::os::raw::c_int,
@@ -279,6 +426,11 @@ impl<T: ValidImageType<T>> Image<T> {
     //     index: ::std::os::raw::c_int,
     //     semwts: *const timespec,
     // ) -> ::std::os::raw::c_int;
+    
+    pub fn semflush(&mut self, index: i64) -> Result<(), RisioError> {
+        let err = unsafe { bindings::ImageStreamIO_semflush(&mut self.image, index as i64) };
+        RisioError::errno_to_error(err as i32)
+    }
 
     // pub fn ImageStreamIO_semflush(
     //     image: *mut IMAGE,
@@ -298,16 +450,18 @@ impl<T: ValidImageType<T>> Image<T> {
     // pub fn ImageStreamIO_UpdateIm(image: *mut IMAGE) -> ::std::os::raw::c_long;
 }
 
+
+
 pub trait ValidImageType<T> {
     fn get_data_type() -> DataType;
-    fn access_array(image: &Image<T>) -> &mut [T];
+    unsafe fn access_array(image: &Image<T>) -> &mut [T];
 }
 
 impl ValidImageType<u8> for u8 {
     fn get_data_type() -> DataType {
         DataType::U8
     }
-    fn access_array(image: &Image<u8>) -> &mut [u8] {
+    unsafe fn access_array(image: &Image<u8>) -> &mut [u8] {
         let len: usize = image.shape.iter().product::<u32>() as usize;
         unsafe { core::slice::from_raw_parts_mut(image.image.array.UI8, len) }
     }
@@ -318,7 +472,7 @@ impl ValidImageType<i8> for i8 {
         DataType::I8
     }
 
-    fn access_array(image: &Image<i8>) -> &mut [i8] {
+    unsafe fn access_array(image: &Image<i8>) -> &mut [i8] {
         let len: usize = image.shape.iter().product::<u32>() as usize;
         unsafe { core::slice::from_raw_parts_mut(image.image.array.SI8, len) }
     }
@@ -329,7 +483,7 @@ impl ValidImageType<u16> for u16 {
         DataType::I8
     }
 
-    fn access_array(image: &Image<u16>) -> &mut [u16] {
+    unsafe fn access_array(image: &Image<u16>) -> &mut [u16] {
         let len: usize = image.shape.iter().product::<u32>() as usize;
         unsafe { core::slice::from_raw_parts_mut(image.image.array.UI16, len) }
     }
@@ -340,7 +494,7 @@ impl ValidImageType<i16> for i16 {
         DataType::I16
     }
 
-    fn access_array(image: &Image<i16>) -> &mut [i16] {
+    unsafe fn access_array(image: &Image<i16>) -> &mut [i16] {
         let len: usize = image.shape.iter().product::<u32>() as usize;
         unsafe { core::slice::from_raw_parts_mut(image.image.array.SI16, len) }
     }
@@ -351,7 +505,7 @@ impl ValidImageType<u32> for u32 {
         DataType::U32
     }
 
-    fn access_array(image: &Image<u32>) -> &mut [u32] {
+    unsafe fn access_array(image: &Image<u32>) -> &mut [u32] {
         let len: usize = image.shape.iter().product::<u32>() as usize;
         unsafe { core::slice::from_raw_parts_mut(image.image.array.UI32, len) }
     }
@@ -362,7 +516,7 @@ impl ValidImageType<i32> for i32 {
         DataType::I32
     }
 
-    fn access_array(image: &Image<i32>) -> &mut [i32] {
+    unsafe fn access_array(image: &Image<i32>) -> &mut [i32] {
         let len: usize = image.shape.iter().product::<u32>() as usize;
         unsafe { core::slice::from_raw_parts_mut(image.image.array.SI32, len) }
     }
@@ -373,7 +527,7 @@ impl ValidImageType<u64> for u64 {
         DataType::U64
     }
 
-    fn access_array(image: &Image<u64>) -> &mut [u64] {
+    unsafe fn access_array(image: &Image<u64>) -> &mut [u64] {
         let len: usize = image.shape.iter().product::<u32>() as usize;
         unsafe { core::slice::from_raw_parts_mut(image.image.array.UI64, len) }
     }
@@ -384,7 +538,7 @@ impl ValidImageType<i64> for i64 {
         DataType::I64
     }
 
-    fn access_array(image: &Image<i64>) -> &mut [i64] {
+    unsafe fn access_array(image: &Image<i64>) -> &mut [i64] {
         let len: usize = image.shape.iter().product::<u32>() as usize;
         unsafe { core::slice::from_raw_parts_mut(image.image.array.SI64, len) }
     }
@@ -395,7 +549,7 @@ impl ValidImageType<f32> for f32 {
         DataType::F32
     }
 
-    fn access_array(image: &Image<f32>) -> &mut [f32] {
+    unsafe fn access_array(image: &Image<f32>) -> &mut [f32] {
         let len: usize = image.shape.iter().product::<u32>() as usize;
         unsafe { core::slice::from_raw_parts_mut(image.image.array.F, len) }
     }
@@ -406,7 +560,7 @@ impl ValidImageType<f64> for f64 {
         DataType::F64
     }
 
-    fn access_array(image: &Image<f64>) -> &mut [f64] {
+    unsafe fn access_array(image: &Image<f64>) -> &mut [f64] {
         let len: usize = image.shape.iter().product::<u32>() as usize;
         unsafe { core::slice::from_raw_parts_mut(image.image.array.D, len) }
     }
@@ -417,7 +571,7 @@ impl ValidImageType<f64> for f64 {
 //         DataType::C64
 //     }
 
-//     fn access_array(image: &Image<num_complex::Complex32>) -> &mut [num_complex::Complex32] {
+//     unsafe fn access_array(image: &Image<num_complex::Complex32>) -> &mut [num_complex::Complex32] {
 //         let len: usize = image.shape.iter().product::<u32>() as usize;
 //         unsafe { core::slice::from_raw_parts_mut(image.image.array.CF, len) }
 //     }
@@ -428,16 +582,8 @@ impl ValidImageType<f64> for f64 {
 //         DataType::C128
 //     }
 
-//     fn access_array(image: &Image<num_complex::Complex64>) -> &mut [num_complex::Complex64] {
+//     unsafe fn access_array(image: &Image<num_complex::Complex64>) -> &mut [num_complex::Complex64] {
 //         let len: usize = image.shape.iter().product::<u32>() as usize;
 //         unsafe { core::slice::from_raw_parts_mut(image.image.array.CD, len) }
 //     }
 // }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn create_shm_image() {}
-}

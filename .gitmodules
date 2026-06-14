@@ -1,4 +1,4 @@
-[submodule "libmilk"]
-	path = libmilk
-	url = git@github.com:jcranney/milk.git
+[submodule "libImageStreamIO"]
+	path = libImageStreamIO
+	url = https://github.com/milk-org/ImageStreamIO
 	branch = dev

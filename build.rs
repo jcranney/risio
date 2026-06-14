@@ -1,18 +1,14 @@
 fn main() {
-    let build_path = cmake::build("./libmilk");
+    let build_path = cmake::build("./libImageStreamIO");
     
     // Use the following commands to link to shared libraries
-    println!("cargo:rustc-link-search={}/milk-1.03.00/lib", build_path.display()); // directory
-    println!("cargo:rustc-link-lib=static=ImageStreamIO");
-    println!("cargo:rustc-link-lib=static=milkCOREMODarith");
-    println!("cargo:rustc-link-lib=static=milkCOREMODiofits");
-    println!("cargo:rustc-link-lib=static=milkCOREMODmemory");
-    println!("cargo:rustc-link-lib=static=milkCOREMODtools");
+    println!("cargo:rustc-link-search={}/lib", build_path.display()); // directory
+    println!("cargo:rustc-link-lib=dylib=ImageStreamIO");
     
     // Generate bindings with bindgen
     let bindings = bindgen::Builder::default()
-        .clang_arg("-Ilibmilk/src")
-        .header("./libmilk/src/CommandLineInterface/CLIcore.h")
+        .clang_arg(format!("-L/{}", build_path.display()))
+        .header("./libImageStreamIO/ImageStreamIO.h")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");

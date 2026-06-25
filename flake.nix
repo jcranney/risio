@@ -3,6 +3,7 @@
     naersk.url = "github:nix-community/naersk/master";
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     utils.url = "github:numtide/flake-utils";
+    self.submodules = true;
   };
 
   outputs = { self, nixpkgs, utils, naersk }:
@@ -15,9 +16,22 @@
         naersk-lib = pkgs.callPackage naersk { };
       in
       {
-        defaultPackage = naersk-lib.buildPackage ./.;
+        defaultPackage = naersk-lib.buildPackage {
+          src = ./.;
+          buildInputs = with pkgs; [ cmake pkg-config ];
+          gitSubmodules = true;
+          gitAllRefs = true;
+          preBuild = ''
+            echo FIND ME HERE
+            ls
+            find \
+                  -name CMakeCache.txt \
+                  -exec rm {} \;
+            '';
+        };
         devShell = with pkgs; mkShell rec {
           buildInputs = [ cargo rustc rustfmt pre-commit rustPackages.clippy
+          cmake
           ];
 
           packages = with pkgs; [

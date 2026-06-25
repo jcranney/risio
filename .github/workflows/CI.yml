@@ -38,6 +38,8 @@ jobs:
             target: ppc64le
     steps:
       - uses: actions/checkout@v6
+      - name: update submodules
+        run: git submodule update --init --recursive
       - uses: actions/setup-python@v6
         with:
           python-version: 3.x

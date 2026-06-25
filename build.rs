@@ -3,7 +3,7 @@ fn main() {
     
     // Use the following commands to link to shared libraries
     println!("cargo:rustc-link-search={}/lib", build_path.display()); // directory
-    println!("cargo:rustc-link-lib=dylib=ImageStreamIO");
+    println!("cargo:rustc-link-lib=static=ImageStreamIO");
     
     // // Generate bindings with bindgen
     // let bindings = bindgen::Builder::default()

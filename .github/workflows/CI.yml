@@ -71,6 +71,8 @@ jobs:
             target: armv7
     steps:
       - uses: actions/checkout@v6
+      - name: update submodules
+        run: git submodule update --init --recursive
       - uses: actions/setup-python@v6
         with:
           python-version: 3.x
@@ -103,6 +105,8 @@ jobs:
             python_arch: arm64
     steps:
       - uses: actions/checkout@v6
+      - name: update submodules
+        run: git submodule update --init --recursive
       - uses: actions/setup-python@v6
         with:
           python-version: 3.13
@@ -130,6 +134,8 @@ jobs:
             target: aarch64
     steps:
       - uses: actions/checkout@v6
+      - name: update submodules
+        run: git submodule update --init --recursive
       - uses: actions/setup-python@v6
         with:
           python-version: 3.x
@@ -149,6 +155,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: update submodules
+        run: git submodule update --init --recursive
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:

@@ -3,7 +3,7 @@ name = "risio"
 version = "0.1.2"
 edition = "2024"
 description = "Rust wrapper for ImageStreamIO library"
-license = "unlicense"
+license = "Unlicense"
 repository = "https://github.com/jcranney/risio"
 
 

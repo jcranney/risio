@@ -4,7 +4,6 @@ version = "0.1.1"
 edition = "2024"
 description = "Rust wrapper for ImageStreamIO library"
 license = "unlicense"
-license-file = "UNLICENSE"
 repository = "https://github.com/jcranney/risio"
 
 

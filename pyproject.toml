@@ -1,6 +1,6 @@
 [project]
 name = "risio"
-version = "0.1.0"
+version = "0.1.3"
 requires-python = ">=3.13"
 dependencies = [
     "astropy>=7.2.0",

@@ -14,7 +14,10 @@ bindgen = "0.72.1"
 [dependencies]
 anyhow = "1.0.102"
 enum-iterator = "2.3.0"
+pyo3 = "0.29.0"
 thiserror = "2.0.18"
+tokio = { version = "1.52.3", features = ["rt", "sync"] }
 
-[[bin]]
-name = "example_thread"
+[lib]
+name = "risio"
+crate-type = ["cdylib"]

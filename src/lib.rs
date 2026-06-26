@@ -5,6 +5,7 @@
     non_camel_case_types
 )]
 pub mod bindings;
+pub mod python;
 use crate::bindings::IMAGE;
 use enum_iterator::{Sequence, all};
 use std::ffi::{CString, NulError};
@@ -258,7 +259,7 @@ impl<T: ValidImageType<T>> Image<T> {
 
     // pub fn ImageStreamIO_get_image_d_ptr(image: *mut IMAGE) -> *mut ::std::os::raw::c_void;
 
-    pub fn read_or_create(name: &str, shape: &[u32]) -> Result<Self, RisioError> {
+    pub fn open_or_create(name: &str, shape: &[u32]) -> Result<Self, RisioError> {
         let shape = Self::validate_shape(shape)?;
 
         match Self::read_sharedmem_image(name, &shape) {
@@ -420,6 +421,13 @@ impl<T: ValidImageType<T>> Image<T> {
     //     semindexdefault: ::std::os::raw::c_int,
     // ) -> ::std::os::raw::c_int;
 
+    pub fn semtrywait(&mut self, index: i64) -> Result<Option<()>, RisioError> {
+        match unsafe { bindings::ImageStreamIO_semwait(&mut self.image, index as i32) } {
+            0 => Ok(Some(())),
+            -1 => Ok(None),
+            err => RisioError::errno_to_error(err).map(|_| Some(())),
+        }
+    }
     // pub fn ImageStreamIO_semtrywait(
     //     image: *mut IMAGE,
     //     index: ::std::os::raw::c_int,

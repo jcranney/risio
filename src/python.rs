@@ -28,65 +28,46 @@ impl ImageF64 {
     #[new]
     fn new(name: &str, shape: Vec<i32>) -> PyResult<Self> {
         let thread = ImageThread::new(name, shape)?;
-        thread.block();
+        thread::sleep(Duration::from_millis(100)); // Still not really sure why this is needed but there are validity issues if I don't have it.
         Ok(Self { thread })
     }
 
     fn write(&mut self, data: Vec<f64>) -> PyResult<()> {
-        self.block();
         if self.thread.thread_write.is_finished() {
-            // return self.thread.join();
             return Err(PyRuntimeError::new_err(
                 "Image thread finished before writing",
             ));
         } else {
-            self.thread.data_tx.blocking_send(data).map_err(|e| {
+            self.thread.data_tx.send(data).map_err(|e| {
                 PyRuntimeError::new_err(format!(
                     "data receiver has already been deallocated \
                     unexpected behaviour. Raise an Issue. {}",
                     e
                 ))
-            })?
+            })?;
         }
-        self.block();
         Ok(())
     }
 
-    fn read(&self) -> PyResult<Vec<f64>> {
-        self.block();
+    fn read(&mut self) -> PyResult<Vec<f64>> {
         if self.thread.thread_read.is_finished() {
             // return self.thread.join();
             Err(PyRuntimeError::new_err(
                 "Image thread finished before reading",
             ))
         } else {
-            if let Some(data) = self.thread.data_rx.borrow().clone() {
-                self.block();
-                Ok(data.to_vec())
-            } else {
-                Err(PyRuntimeError::new_err("Data hasn't yet been initialised."))
-            }
+            Ok((*self.thread.data_read.lock().unwrap()).clone())
         }
-    }
-
-    fn rw_status(&self) -> PyResult<(ThreadState, ThreadState)> {
-        Ok(self.thread.rw_status())
-    }
-
-    fn block(&self) {
-        self.thread.block();
-
     }
 }
 
 struct ImageThread<T> {
     thread_read: JoinHandle<Result<()>>,
     thread_write: JoinHandle<Result<()>>,
-    data_tx: tokio::sync::mpsc::Sender<Vec<T>>,
-    data_rx: tokio::sync::watch::Receiver<Option<Vec<T>>>,
-    status_read: Arc<Mutex<ThreadState>>,
-    status_write: Arc<Mutex<ThreadState>>,
-    mutex: Arc<Mutex<()>>,
+    data_tx: std::sync::mpsc::Sender<Vec<T>>,
+    data_read: Arc<Mutex<Vec<T>>>,
+    exit_tx_read: std::sync::mpsc::Sender<()>,
+    exit_tx_write: std::sync::mpsc::Sender<()>,
 }
 
 impl<T: Clone + Send + Sync + ValidImageType<T> + 'static> ImageThread<T> {
@@ -96,141 +77,110 @@ impl<T: Clone + Send + Sync + ValidImageType<T> + 'static> ImageThread<T> {
         if shape.iter().any(|x| *x <= 0) {
             return Err(PyIndexError::new_err("all shape indices must be positive"));
         }
+
         let shape_read: Vec<u32> = shape.into_iter().map(|x| x as u32).collect();
         let shape_write: Vec<u32> = shape_read.clone();
         let name_read = name.to_owned();
         let name_write = name.to_owned();
-        let (tx_main, mut rx_thread) = tokio::sync::mpsc::channel::<Vec<T>>(1);
-        let (tx_thread, rx_main) = tokio::sync::watch::channel::<Option<Vec<T>>>(None);
-        let status_read = Arc::new(Mutex::new(ThreadState::Initialising));
-        let status_write = Arc::new(Mutex::new(ThreadState::Initialising));
-        // let (tx_status, rx_status) = std::sync::mpsc::channel::<ThreadStatus>();
-        let status_read_thread = status_read.clone();
-        let status_write_thread = status_write.clone();
-        let mutex = Arc::new(Mutex::new(()));
 
-        // some inconsistent behavious, so I'll try two threads - one for
-        // reading and one for writing.
-        let mutex_write = mutex.clone();
-        let mutex_read = mutex.clone();
-        let t_write = thread::spawn::<_, Result<()>>(move || {
-            // tx_status.send(ThreadStatus::Initialising)?;
-            {
-                let mut status = status_write_thread.lock().unwrap();
-                *status = ThreadState::Initialising;
-            }
+        let data: Arc<Mutex<Vec<T>>> = Arc::new(Mutex::new(vec![]));
+        let data_read_thread = data.clone();
+        let data_write_thread = data.clone();
+
+        let (tx_main, rx_thread) = std::sync::mpsc::channel::<Vec<T>>();
+        let (tx_ready, rx_ready) = std::sync::mpsc::channel();
+        let (tx_write_exit, rx_write_exit) = std::sync::mpsc::channel::<()>();
+        let t_write = thread::spawn(move || {
             let mut image;
             match crate::Image::<T>::open_or_create(&name_write, &shape_write) {
                 Ok(im) => {
                     image = im;
                 }
                 Err(e) => {
-                    let mut status = status_write_thread.lock().unwrap();
-                    *status = ThreadState::Finished;
                     return Err(e)?;
                 }
             }
+            tx_ready.send(()).unwrap();
             loop {
-                {
-                    *status_write_thread.lock().unwrap() = ThreadState::Ready;
-                }
-                match rx_thread.blocking_recv() {
-                    Some(data) => {
-                        {
-                            let mut status = status_write_thread.lock().unwrap();
-                            *status = ThreadState::Updating;
-                        }
-                        let guard = mutex_write.lock().unwrap();
+                match rx_thread.try_recv() {
+                    Ok(data) => {
+                        let guard = data_write_thread.lock().unwrap();
                         image.array().iter_mut().zip(data).for_each(|(o, i)| *o = i);
-                        image.sempost(0)?;
+                        image.sempost(-1)?;
                         drop(guard);
                     }
-                    None => break,
+                    Err(e) => match e {
+                        std::sync::mpsc::TryRecvError::Empty => (),
+                        std::sync::mpsc::TryRecvError::Disconnected => break,
+                    },
                 }
-            }
-            {
-                let mut status = status_write_thread.lock().unwrap();
-                *status = ThreadState::Finished;
+                match rx_write_exit.try_recv() {
+                    Ok(()) => break,
+                    Err(e) => match e {
+                        std::sync::mpsc::TryRecvError::Empty => continue,
+                        std::sync::mpsc::TryRecvError::Disconnected => break,
+                    },
+                }
             }
             Ok(())
         });
+        rx_ready.recv().unwrap();
 
+        let (tx_ready, rx_ready) = std::sync::mpsc::channel();
+        let (tx_read_exit, rx_read_exit) = std::sync::mpsc::channel::<()>();
         let t_read = thread::spawn::<_, Result<()>>(move || {
-            // tx_status.send(ThreadStatus::Initialising)?;
-            {
-                let mut status = status_read_thread.lock().unwrap();
-                *status = ThreadState::Initialising;
-            }
             let mut image;
             match crate::Image::<T>::open_or_create(&name_read, &shape_read) {
                 Ok(im) => {
                     image = im;
-                    let guard = mutex_read.lock().unwrap();
-                    tx_thread.send(Some(image.array().to_vec()))?;
-                    drop(guard);
                 }
                 Err(e) => {
-                    let mut status = status_read_thread.lock().unwrap();
-                    *status = ThreadState::Finished;
                     return Err(e)?;
                 }
             }
-            loop {
-                {
-                    let mut status = status_read_thread.lock().unwrap();
-                    *status = ThreadState::Ready;
-                }
-                image.semwait(0)?;
-                {
-                    let mut status = status_read_thread.lock().unwrap();
-                    *status = ThreadState::Updating;
-                }
-                let guard = mutex_read.lock().unwrap();
-                tx_thread
-                    .send_replace(Some(image.array().to_vec()))
-                    .unwrap();
-                drop(guard);
+            {
+                *data_read_thread.lock().unwrap() = image.array().to_vec();
             }
+            image.semflush(-1)?;
+            tx_ready.send(()).unwrap();
+            loop {
+                match image.semtrywait(0)? {
+                    Some(()) => {
+                        *data_read_thread.lock().unwrap() = image.array().to_vec();
+                    }
+                    None => (),
+                }
+                match rx_read_exit.try_recv() {
+                    Ok(()) => break,
+                    Err(e) => match e {
+                        std::sync::mpsc::TryRecvError::Empty => continue,
+                        std::sync::mpsc::TryRecvError::Disconnected => break,
+                    },
+                }
+            }
+            Ok(())
         });
-        // wait for both threads to finish initialising
+        rx_ready.recv().unwrap();
+
         let new = Self {
             thread_read: t_read,
             thread_write: t_write,
             data_tx: tx_main,
-            data_rx: rx_main,
-            status_read,
-            status_write,
-            mutex,
+            data_read: data,
+            exit_tx_read: tx_read_exit,
+            exit_tx_write: tx_write_exit,
         };
-
-        loop {
-            match new.rw_status() {
-                (ThreadState::Initialising, _) => thread::sleep(Duration::from_millis(10)),
-                (_, ThreadState::Initialising) => thread::sleep(Duration::from_millis(10)),
-                _ => break,
-            }
-        }
 
         Ok(new)
     }
+}
 
-    fn rw_status(&self) -> (ThreadState, ThreadState) {
-        let status_read;
-        {
-            let thread_status = self.status_read.lock().unwrap();
-            status_read = *thread_status;
-        }
-        let status_write;
-        {
-            let thread_status = self.status_write.lock().unwrap();
-            status_write = *thread_status;
-        }
-        (status_read, status_write)
-    }
-
-    fn block(&self) {
-        let guard = self.mutex.lock().unwrap();
-        drop(guard);
+impl<T> Drop for ImageThread<T> {
+    fn drop(&mut self) {
+        let _ = self.exit_tx_read.send(());
+        let _ = self.exit_tx_write.send(());
+        while !self.thread_read.is_finished(){};
+        while !self.thread_write.is_finished(){};
     }
 }
 

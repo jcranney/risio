@@ -422,16 +422,12 @@ impl<T: ValidImageType<T>> Image<T> {
     // ) -> ::std::os::raw::c_int;
 
     pub fn semtrywait(&mut self, index: i64) -> Result<Option<()>, RisioError> {
-        match unsafe { bindings::ImageStreamIO_semwait(&mut self.image, index as i32) } {
+        match unsafe { bindings::ImageStreamIO_semtrywait(&mut self.image, index as i32) } {
             0 => Ok(Some(())),
-            -1 => Ok(None),
+            x if x < 0 => Ok(None),
             err => RisioError::errno_to_error(err).map(|_| Some(())),
         }
     }
-    // pub fn ImageStreamIO_semtrywait(
-    //     image: *mut IMAGE,
-    //     index: ::std::os::raw::c_int,
-    // ) -> ::std::os::raw::c_int;
 
     // pub fn ImageStreamIO_semtimedwait(
     //     image: *mut IMAGE,

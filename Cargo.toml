@@ -23,4 +23,7 @@ tokio = { version = "1.52.3", features = ["rt", "sync"] }
 
 [lib]
 name = "risio"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "risio-test"

@@ -31,7 +31,7 @@
         };
         devShell = with pkgs; mkShell rec {
           buildInputs = [ cargo rustc rustfmt pre-commit rustPackages.clippy
-          cmake
+          cmake cargo-watch
           ];
 
           packages = with pkgs; [

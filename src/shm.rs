@@ -7,6 +7,8 @@ use thiserror::Error;
 
 use libc;
 
+use crate::bindings::IMAGE;
+
 #[derive(Error, Debug)]
 enum RisioSHMError {
     #[error(
@@ -27,18 +29,10 @@ pub trait RisioShm {
             fd => fd,
         };
 
-        println!("fd: {}, fdfl: {}", fd, unsafe {
-            libc::fcntl(fd, libc::F_GETFL)
-        },);
-
         match unsafe { libc::close(fd) } {
             e if e < 0 => Self::get_error()?,
             _ => (),
         };
-
-        println!("fd: {}, fdfl: {}", fd, unsafe {
-            libc::fcntl(fd, libc::F_GETFL)
-        },);
 
         Ok(())
     }
@@ -68,31 +62,38 @@ pub trait RisioShm {
             libc::shm_open(
                 self.name_csrt()?.as_ptr(),
                 libc::O_CREAT | libc::O_RDWR,
-                0o666,
+                libc::S_IRUSR
+                    | libc::S_IRGRP
+                    | libc::S_IROTH
+                    | libc::S_IWUSR
+                    | libc::S_IWGRP
+                    | libc::S_IWOTH,
             )
         };
         if fd < 0 {
             Self::get_error()?;
         }
+        // println!("fd: {}, fdfl: {}", fd, unsafe {
+        //     libc::fcntl(fd, libc::F_GETFL)
+        // },);
 
-        println!("fd: {}, fdfl: {}", fd, unsafe {
-            libc::fcntl(fd, libc::F_GETFL)
-        },);
+        // unsafe {
+        //     let mut buf: libc::stat = std::mem::zeroed();
+        //     if libc::fstat(fd, &mut buf) < 0 {
+        //         Self::get_error()?;
+        //     }
+        //     println!("fstat: {:?}", buf);
+        // };
+
+        if unsafe { libc::ftruncate(fd, size_of::<IMAGE>() as i64) } < 0 {
+            Self::get_error()?;
+        }
 
         match unsafe { libc::close(fd) } {
             e if e < 0 => Self::get_error()?,
             _ => (),
         };
-
-        println!("fd: {}, fdfl: {}", fd, unsafe {
-            libc::fcntl(fd, libc::F_GETFL)
-        },);
-
-        // if unsafe { libc::ftruncate(fd, size_of::<IMAGE>() as i64) } < 0 {
-        //     Self::get_error()?;
-        // }
         // Resize the shared memory object to the size of our data.
-        // rustix::fs::ftruncate(&fd, size_of::<IMAGE>() as u64)?;
 
         // Map the shared memory object into our address space.
         //

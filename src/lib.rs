@@ -6,6 +6,8 @@
 )]
 pub mod bindings;
 pub mod python;
+pub mod sem;
+pub mod shm;
 use crate::bindings::IMAGE;
 use enum_iterator::{Sequence, all};
 use std::ffi::{CString, NulError};
@@ -70,6 +72,35 @@ pub enum RisioError {
     #[error("Core ImageStreamIO Error: Version")]
     Version,
 }
+
+
+
+// impl IMAGE {
+//     fn new_empty() -> IMAGE;
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 impl From<NulError> for RisioError {
     fn from(value: NulError) -> Self {
@@ -566,3 +597,4 @@ impl ValidImageType<f64> for f64 {
         unsafe { core::slice::from_raw_parts_mut(image.image.array.D, len) }
     }
 }
+

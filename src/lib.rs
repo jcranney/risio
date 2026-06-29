@@ -8,7 +8,8 @@ pub mod bindings;
 pub mod python;
 pub mod sem;
 pub mod shm;
-use crate::bindings::IMAGE;
+pub mod ImageStreamIO;
+use crate::bindings::{IMAGE, ZAXIS_MAPPING, ZAXIS_SPACIAL, ZAXIS_TEMPORAL, ZAXIS_UNDEF, ZAXIS_WAVELENGTH};
 use enum_iterator::{Sequence, all};
 use std::ffi::{CString, NulError};
 use std::fmt::Debug;
@@ -161,6 +162,25 @@ impl TryFrom<u8> for DataType {
     type Error = RisioError;
 }
 
+impl DataType {
+    fn typesize(&self) -> usize {
+        match self {
+            DataType::U8 => 1,
+            DataType::I8 => 1,
+            DataType::U16 => 2,
+            DataType::I16 => 2,
+            DataType::U32 => 4,
+            DataType::I32 => 4,
+            DataType::U64 => 8,
+            DataType::I64 => 8,
+            DataType::F32 => 4,
+            DataType::F64 => 8,
+            DataType::C64 => 8,
+            DataType::C128 => 16,
+            DataType::F16 => 2,
+        }
+    }
+}
 /// From ImageStreamIO: ImageStruct.h:
 ///
 /// ```txt
@@ -177,19 +197,18 @@ impl TryFrom<u8> for DataType {
 ///    4: mapping index
 /// ```
 ///
-/// Todo: check with Olivier if the encoding code is intended to represent other
-/// axes than the zeroth too.
+
 #[derive(Debug, Clone, Copy)]
 pub struct ImageType {
     circular_buffer: bool,
     vector_or_matrix: bool,
     stream_from_other_computer: bool,
     stream_for_other_computer: bool,
-    axis_encoding_code: Axis0EncodingCode,
+    axis_encoding_code: ZAxisEncodingCode,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-pub enum Axis0EncodingCode {
+pub enum ZAxisEncodingCode {
     #[default]
     Undefined,
     SpatialCoordinate,
@@ -214,12 +233,12 @@ impl From<ImageType> for u64 {
             0
         };
         result += match value.axis_encoding_code {
-            Axis0EncodingCode::Undefined => 0x0 << 16,
-            Axis0EncodingCode::SpatialCoordinate => 0x1 << 16,
-            Axis0EncodingCode::TemporalCoordinate => 0x2 << 16,
-            Axis0EncodingCode::WavelengthCoordinate => 0x3 << 16,
-            Axis0EncodingCode::MappingIndex => 0x4 << 16,
-        };
+            ZAxisEncodingCode::Undefined => ZAXIS_UNDEF,
+            ZAxisEncodingCode::SpatialCoordinate => ZAXIS_SPACIAL,
+            ZAxisEncodingCode::TemporalCoordinate => ZAXIS_TEMPORAL,
+            ZAxisEncodingCode::WavelengthCoordinate => ZAXIS_WAVELENGTH,
+            ZAxisEncodingCode::MappingIndex => ZAXIS_MAPPING,
+        } as u64;
         result
     }
 }
@@ -231,7 +250,7 @@ impl Default for ImageType {
             vector_or_matrix: true,
             stream_from_other_computer: false,
             stream_for_other_computer: false,
-            axis_encoding_code: Axis0EncodingCode::default(),
+            axis_encoding_code: ZAxisEncodingCode::default(),
         }
     }
 }

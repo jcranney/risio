@@ -386,6 +386,12 @@ pub struct timespec {
     pub tv_sec: __time_t,
     pub tv_nsec: __syscall_slong_t,
 }
+impl Default for timespec {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl timespec {
     pub fn new() -> Self {
         Self {
@@ -1503,6 +1509,12 @@ pub struct IMAGE_KEYWORD {
     comment: [::std::os::raw::c_char; 80usize],
 }
 
+impl Default for IMAGE_KEYWORD {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IMAGE_KEYWORD {
     pub fn new() -> Self {
         Self {
@@ -1735,6 +1747,12 @@ pub struct STREAM_PROC_TRACE {
     cnt0: u64,
 }
 
+impl Default for STREAM_PROC_TRACE {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl STREAM_PROC_TRACE {
     pub fn new() -> Self {
         Self {
@@ -1780,6 +1798,12 @@ pub struct CBFRAMEMD {
     atime: timespec,
     writetime: timespec,
 }
+impl Default for CBFRAMEMD {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CBFRAMEMD {
     pub fn new() -> Self {
         Self {

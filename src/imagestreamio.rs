@@ -79,7 +79,7 @@ impl IMAGE {
             x => return Err(Error::InvalidSize(x))?,
         };
         let naxis = match naxis {
-            1 | 2 | 3 => naxis,
+            1..=3 => naxis,
             _ => return Err(Error::InvalidNaxis(naxis))?,
         };
         if imagetype.circular_buffer && (naxis != 3) {
@@ -264,13 +264,13 @@ impl IMAGE {
                 round_up_8(size_of::<IMAGE_METADATA>()),
             ) // TODO: handle an error better
             .grow(
-                &mut unsafe {
+                unsafe {
                     core::slice::from_raw_parts_mut(array_raw.raw.cast(), round_up_8(imdatamemsize))
                 },
                 imdatamemsize,
             )
             .grow(
-                &mut unsafe {
+                unsafe {
                     core::slice::from_raw_parts_mut(
                         kw.as_mut_ptr().cast(),
                         nb_kw * size_of::<IMAGE_KEYWORD>(),
@@ -279,7 +279,7 @@ impl IMAGE {
                 round_up_8(size_of::<IMAGE_KEYWORD>() * nb_kw),
             )
             .grow(
-                &mut unsafe {
+                unsafe {
                     core::slice::from_raw_parts_mut(
                         semfile.as_mut_ptr().cast(),
                         NB_SEM * size_of::<SEMFILEDATA>(),
@@ -292,7 +292,7 @@ impl IMAGE {
                 round_up_8(size_of::<sem_t>()),
             )
             .grow(
-                &mut unsafe {
+                unsafe {
                     core::slice::from_raw_parts_mut(
                         sem_read_pid.as_mut_ptr().cast(),
                         size_of::<i32>() * NB_SEM,
@@ -301,7 +301,7 @@ impl IMAGE {
                 round_up_8(size_of::<i32>() * NB_SEM),
             )
             .grow(
-                &mut unsafe {
+                unsafe {
                     core::slice::from_raw_parts_mut(
                         sem_write_pid.as_mut_ptr().cast(),
                         size_of::<i32>() * NB_SEM,
@@ -310,7 +310,7 @@ impl IMAGE {
                 round_up_8(size_of::<i32>() * NB_SEM),
             )
             .grow(
-                &mut unsafe {
+                unsafe {
                     core::slice::from_raw_parts_mut(
                         sem_ctrl.as_mut_ptr().cast(),
                         size_of::<u32>() * NB_SEM,
@@ -319,7 +319,7 @@ impl IMAGE {
                 round_up_8(size_of::<u32>() * NB_SEM),
             )
             .grow(
-                &mut unsafe {
+                unsafe {
                     core::slice::from_raw_parts_mut(
                         sem_write_pid.as_mut_ptr().cast(),
                         size_of::<u32>() * NB_SEM,
@@ -328,7 +328,7 @@ impl IMAGE {
                 round_up_8(size_of::<u32>() * NB_SEM),
             )
             .grow(
-                &mut unsafe {
+                unsafe {
                     core::slice::from_raw_parts_mut(
                         stream_proc_trace.as_mut_ptr().cast(),
                         size_of::<STREAM_PROC_TRACE>() * nbproctrace,
@@ -337,7 +337,7 @@ impl IMAGE {
                 round_up_8(size_of::<STREAM_PROC_TRACE>() * nbproctrace),
             )
             .grow(
-                &mut unsafe {
+                unsafe {
                     core::slice::from_raw_parts_mut(
                         atimearray.as_mut_ptr().cast(),
                         size_of::<timespec>() * size[2] as usize,
@@ -346,7 +346,7 @@ impl IMAGE {
                 round_up_8(size_of::<timespec>() * size[2] as usize),
             )
             .grow(
-                &mut unsafe {
+                unsafe {
                     core::slice::from_raw_parts_mut(
                         writetimearray.as_mut_ptr().cast(),
                         size_of::<timespec>() * size[2] as usize,
@@ -355,7 +355,7 @@ impl IMAGE {
                 round_up_8(size_of::<timespec>() * size[2] as usize),
             )
             .grow(
-                &mut unsafe {
+                unsafe {
                     core::slice::from_raw_parts_mut(
                         cntarray.as_mut_ptr().cast(),
                         size_of::<u64>() * size[2] as usize,
@@ -364,16 +364,16 @@ impl IMAGE {
                 round_up_8(size_of::<u64>() * size[2] as usize),
             )
             .grow(
-                &mut unsafe {
+                unsafe {
                     core::slice::from_raw_parts_mut(
                         circ_buff_md.as_mut_ptr().cast(),
-                        size_of::<CBFRAMEMD>() * cb_size as usize,
+                        size_of::<CBFRAMEMD>() * cb_size,
                     )
                 },
-                round_up_8(size_of::<CBFRAMEMD>() * cb_size as usize),
+                round_up_8(size_of::<CBFRAMEMD>() * cb_size),
             )
             .grow(
-                &mut unsafe {
+                unsafe {
                     core::slice::from_raw_parts_mut(cb_imdata.cast(), imdatamemsize * cb_size)
                 },
                 round_up_8(imdatamemsize * cb_size),

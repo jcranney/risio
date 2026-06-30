@@ -1,43 +1,14 @@
-use risio::shm::RisioShm;
+use risio::{ImageType, bindings::IMAGE};
 
-fn main() {
-    loop {
-        a();
-        b();
-        c();
-    }
-}
-
-struct A {}
-impl RisioShm for A {
-    fn name(&self) -> &str {
-        "heressomeshmfortesting"
-    }
-}
-
-fn a() {
-    let a = A {};
-    println!("creating");
-    a.create().unwrap();
-    println!("unlinking");
-    a.unlink().unwrap();
-    println!("opening");
-    a.open().unwrap_err();
-}
-
-fn b() {
-    let a = A {};
-    println!("creating");
-    a.create().unwrap();
-    println!("unlinking");
-    a.unlink().unwrap();
-    println!("creating");
-    a.create().unwrap();
-    println!("opening");
-    a.open().unwrap();
-}
-
-fn c() {
-    let a = A {};
-    a.create().unwrap();
+fn main() -> anyhow::Result<()> {
+    IMAGE::create_new_image_from_scratch(
+        "myimname",
+        2,
+        &[3, 4, 0],
+        risio::DataType::F64,
+        3,
+        ImageType::image(),
+        2,
+    )?;
+    Ok(())
 }

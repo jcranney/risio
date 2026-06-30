@@ -2,6 +2,8 @@
 to regenerate with bindgen by removing comments in build.rs, but care needs to
 be taken in comparing the diff. */
 
+use rkyv::{Archive, Deserialize, Serialize};
+
 pub const IMAGESTRUCT_VERSION: &[u8; 4] = b"2.00";
 
 #[repr(C)]
@@ -672,7 +674,7 @@ const _: () = {
     ["Offset of field: timeval::tv_usec"][::std::mem::offset_of!(timeval, tv_usec) - 8usize];
 };
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Archive, Deserialize, Serialize, PartialEq)]
 pub struct timespec {
     pub tv_sec: __time_t,
     pub tv_nsec: __syscall_slong_t,
@@ -1071,6 +1073,7 @@ pub union sem_t {
     pub __size: [::std::os::raw::c_char; 32usize],
     pub __align: ::std::os::raw::c_long,
 }
+
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
     ["Size of sem_t"][::std::mem::size_of::<sem_t>() - 32usize];
@@ -3597,7 +3600,7 @@ const _: () = {
 };
 #[doc = " @brief Image metadata\n\n\n"]
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Archive, Deserialize, Serialize, PartialEq)]
 pub struct IMAGE_METADATA {
     pub version: [::std::os::raw::c_char; 32usize],
     #[doc = " @brief Image Name"]

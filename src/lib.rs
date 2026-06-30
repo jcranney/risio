@@ -7,9 +7,7 @@
 pub mod bindings;
 pub mod imagestreamio;
 pub mod python;
-use crate::bindings::{
-    ZAXIS_MAPPING, ZAXIS_SPACIAL, ZAXIS_TEMPORAL, ZAXIS_UNDEF, ZAXIS_WAVELENGTH,
-};
+use bindings::*;
 use enum_iterator::{Sequence, all};
 use std::ffi::NulError;
 use std::fmt::Debug;

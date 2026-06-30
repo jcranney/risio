@@ -19,15 +19,12 @@ const fn round_up_8(x: usize) -> usize {
 
 use crate::{
     DataType, ImageType, ZAxisEncodingCode,
-    bindings::{
-        self, CBFRAMEMD, IMAGE, IMAGE__bindgen_ty_1, IMAGE_KEYWORD, IMAGE_METADATA, SEMFILEDATA,
-        STREAM_PROC_TRACE, sem_t, timespec,
-    },
+    bindings::*
 };
 
 impl IMAGE {
-    fn _name(name: &str) -> [i8; bindings::STRINGMAXLEN_IMAGE_NAME as usize] {
-        let mut out = [0; bindings::STRINGMAXLEN_IMAGE_NAME as usize];
+    fn _name(name: &str) -> [i8; STRINGMAXLEN_IMAGE_NAME as usize] {
+        let mut out = [0; STRINGMAXLEN_IMAGE_NAME as usize];
         for (out_i, in_i) in out.iter_mut().zip(name.as_bytes()) {
             *out_i = *in_i as i8;
         }
@@ -45,7 +42,7 @@ impl IMAGE {
         let mut version = [0; 32];
         version
             .iter_mut()
-            .zip(bindings::IMAGESTRUCT_VERSION)
+            .zip(IMAGESTRUCT_VERSION)
             .for_each(|(a, b)| {
                 *a = *b as i8;
             });
@@ -69,7 +66,7 @@ impl IMAGE {
         imagetype: ImageType,
         cb_size: usize,
     ) -> Result<Self> {
-        const NB_SEM: usize = bindings::IMAGE_NB_SEMAPHORE as usize;
+        const NB_SEM: usize = IMAGE_NB_SEMAPHORE as usize;
         let nelement = size
             .iter()
             .map(|x| if *x == 0 { 1 } else { *x })
@@ -93,7 +90,7 @@ impl IMAGE {
             raw: unsafe { aligned_alloc(8, imdatamemsize) },
         };
 
-        let nbproctrace = bindings::IMAGE_NB_PROCTRACE as usize;
+        let nbproctrace = IMAGE_NB_PROCTRACE as usize;
 
         let mut kw: Vec<IMAGE_KEYWORD> = (0..nb_kw).map(|_| IMAGE_KEYWORD::new()).collect();
 
@@ -105,8 +102,8 @@ impl IMAGE {
         let mut sem_status: Vec<u32> = vec![];
         let mut semfile: Vec<SEMFILEDATA> = vec![];
         for semindex in 0..NB_SEM {
-            let mut sem_tmp: bindings::sem_t = unsafe { std::mem::zeroed() };
-            match unsafe { bindings::sem_init(&mut sem_tmp, 1, bindings::SEMAPHORE_INITVAL) } {
+            let mut sem_tmp: sem_t = unsafe { std::mem::zeroed() };
+            match unsafe { sem_init(&mut sem_tmp, 1, SEMAPHORE_INITVAL) } {
                 e if e < 0 => Self::fetch_err()?,
                 _ => (),
             };
@@ -122,12 +119,12 @@ impl IMAGE {
 
         let mut stream_proc_trace: Vec<STREAM_PROC_TRACE> = vec![];
         stream_proc_trace.resize(
-            bindings::IMAGE_NB_PROCTRACE as usize,
+            IMAGE_NB_PROCTRACE as usize,
             STREAM_PROC_TRACE::new(),
         );
 
-        let mut atimearray: Vec<bindings::timespec> = Vec::new();
-        let mut writetimearray: Vec<bindings::timespec> = Vec::new();
+        let mut atimearray: Vec<timespec> = Vec::new();
+        let mut writetimearray: Vec<timespec> = Vec::new();
         let mut cntarray: Vec<u64> = Vec::new();
 
         match imagetype {
@@ -139,8 +136,8 @@ impl IMAGE {
                 axis_encoding_code: ZAxisEncodingCode::TemporalCoordinate,
                 ..
             } => {
-                atimearray.resize(size[2] as usize, bindings::timespec::new());
-                writetimearray.resize(size[2] as usize, bindings::timespec::new());
+                atimearray.resize(size[2] as usize, timespec::new());
+                writetimearray.resize(size[2] as usize, timespec::new());
                 cntarray.resize(size[2] as usize, 0);
             }
             _ => (),
@@ -179,16 +176,16 @@ impl IMAGE {
         //     _ => unreachable!(),
         // };
 
-        let mut last_access_time = bindings::timespec::new();
-        unsafe { bindings::clock_gettime(bindings::CLOCK_TAI as i32, &mut last_access_time) };
-        let mut creation_time = bindings::timespec::new();
-        unsafe { bindings::clock_gettime(bindings::CLOCK_TAI as i32, &mut creation_time) };
+        let mut last_access_time = timespec::new();
+        unsafe { clock_gettime(CLOCK_TAI as i32, &mut last_access_time) };
+        let mut creation_time = timespec::new();
+        unsafe { clock_gettime(CLOCK_TAI as i32, &mut creation_time) };
 
         let mut flagarray: Vec<u64> = Vec::new(); // TODO: This isn't initialised in ISIO, but worse
         // than that, there's no memory allocated for it in the map so accessing it will probably
         // segfault.
 
-        let mut md = bindings::IMAGE_METADATA {
+        let mut md = IMAGE_METADATA {
             version: Self::version(),
             name: Self::_name(name),
             naxis: naxis as u8,
@@ -198,8 +195,8 @@ impl IMAGE {
             imagetype: imagetype.into(),
             creationtime: creation_time,
             lastaccesstime: last_access_time,
-            atime: bindings::timespec::new(),
-            writetime: bindings::timespec::new(),
+            atime: timespec::new(),
+            writetime: timespec::new(),
             creatorPID: unsafe { libc::getpid() },
             ownerPID: 0,
             shared: 1,

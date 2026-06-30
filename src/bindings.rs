@@ -11,133 +11,6 @@ pub const IMAGESTRUCT_VERSION: &[u8; 4] = b"2.00";
 struct __BindgenBitfieldUnit<Storage> {
     storage: Storage,
 }
-impl<Storage> __BindgenBitfieldUnit<Storage> {
-    #[inline]
-    pub const fn new(storage: Storage) -> Self {
-        Self { storage }
-    }
-}
-impl<Storage> __BindgenBitfieldUnit<Storage>
-where
-    Storage: AsRef<[u8]> + AsMut<[u8]>,
-{
-    #[inline]
-    fn extract_bit(byte: u8, index: usize) -> bool {
-        let bit_index = if cfg!(target_endian = "big") {
-            7 - (index % 8)
-        } else {
-            index % 8
-        };
-        let mask = 1 << bit_index;
-        byte & mask == mask
-    }
-    #[inline]
-    pub fn get_bit(&self, index: usize) -> bool {
-        debug_assert!(index / 8 < self.storage.as_ref().len());
-        let byte_index = index / 8;
-        let byte = self.storage.as_ref()[byte_index];
-        Self::extract_bit(byte, index)
-    }
-    #[inline]
-    pub unsafe fn raw_get_bit(this: *const Self, index: usize) -> bool {
-        debug_assert!(index / 8 < core::mem::size_of::<Storage>());
-        let byte_index = index / 8;
-        let byte = unsafe { *(core::ptr::addr_of!((*this).storage) as *const u8).add(byte_index) };
-        Self::extract_bit(byte, index)
-    }
-    #[inline]
-    fn change_bit(byte: u8, index: usize, val: bool) -> u8 {
-        let bit_index = if cfg!(target_endian = "big") {
-            7 - (index % 8)
-        } else {
-            index % 8
-        };
-        let mask = 1 << bit_index;
-        if val { byte | mask } else { byte & !mask }
-    }
-    #[inline]
-    pub fn set_bit(&mut self, index: usize, val: bool) {
-        debug_assert!(index / 8 < self.storage.as_ref().len());
-        let byte_index = index / 8;
-        let byte = &mut self.storage.as_mut()[byte_index];
-        *byte = Self::change_bit(*byte, index, val);
-    }
-    #[inline]
-    pub unsafe fn raw_set_bit(this: *mut Self, index: usize, val: bool) {
-        debug_assert!(index / 8 < core::mem::size_of::<Storage>());
-        let byte_index = index / 8;
-        let byte = unsafe { (core::ptr::addr_of_mut!((*this).storage) as *mut u8).add(byte_index) };
-        unsafe { *byte = Self::change_bit(*byte, index, val) };
-    }
-    #[inline]
-    pub fn get(&self, bit_offset: usize, bit_width: u8) -> u64 {
-        debug_assert!(bit_width <= 64);
-        debug_assert!(bit_offset / 8 < self.storage.as_ref().len());
-        debug_assert!((bit_offset + (bit_width as usize)) / 8 <= self.storage.as_ref().len());
-        let mut val = 0;
-        for i in 0..(bit_width as usize) {
-            if self.get_bit(i + bit_offset) {
-                let index = if cfg!(target_endian = "big") {
-                    bit_width as usize - 1 - i
-                } else {
-                    i
-                };
-                val |= 1 << index;
-            }
-        }
-        val
-    }
-    #[inline]
-    pub unsafe fn raw_get(this: *const Self, bit_offset: usize, bit_width: u8) -> u64 {
-        debug_assert!(bit_width <= 64);
-        debug_assert!(bit_offset / 8 < core::mem::size_of::<Storage>());
-        debug_assert!((bit_offset + (bit_width as usize)) / 8 <= core::mem::size_of::<Storage>());
-        let mut val = 0;
-        for i in 0..(bit_width as usize) {
-            if unsafe { Self::raw_get_bit(this, i + bit_offset) } {
-                let index = if cfg!(target_endian = "big") {
-                    bit_width as usize - 1 - i
-                } else {
-                    i
-                };
-                val |= 1 << index;
-            }
-        }
-        val
-    }
-    #[inline]
-    pub fn set(&mut self, bit_offset: usize, bit_width: u8, val: u64) {
-        debug_assert!(bit_width <= 64);
-        debug_assert!(bit_offset / 8 < self.storage.as_ref().len());
-        debug_assert!((bit_offset + (bit_width as usize)) / 8 <= self.storage.as_ref().len());
-        for i in 0..(bit_width as usize) {
-            let mask = 1 << i;
-            let val_bit_is_set = val & mask == mask;
-            let index = if cfg!(target_endian = "big") {
-                bit_width as usize - 1 - i
-            } else {
-                i
-            };
-            self.set_bit(index + bit_offset, val_bit_is_set);
-        }
-    }
-    #[inline]
-    pub unsafe fn raw_set(this: *mut Self, bit_offset: usize, bit_width: u8, val: u64) {
-        debug_assert!(bit_width <= 64);
-        debug_assert!(bit_offset / 8 < core::mem::size_of::<Storage>());
-        debug_assert!((bit_offset + (bit_width as usize)) / 8 <= core::mem::size_of::<Storage>());
-        for i in 0..(bit_width as usize) {
-            let mask = 1 << i;
-            let val_bit_is_set = val & mask == mask;
-            let index = if cfg!(target_endian = "big") {
-                bit_width as usize - 1 - i
-            } else {
-                i
-            };
-            unsafe { Self::raw_set_bit(this, index + bit_offset, val_bit_is_set) };
-        }
-    }
-}
 #[derive(PartialEq, Copy, Clone, Hash, Debug, Default)]
 #[repr(C)]
 struct __BindgenComplex<T> {
@@ -145,11 +18,6 @@ struct __BindgenComplex<T> {
     pub im: T,
 }
 pub const STRINGMAXLEN_IMAGE_NAME: u32 = 80;
-const STRINGMAXLEN_FILE_NAME: u32 = 200;
-const STRINGMAXLEN_DIR_NAME: u32 = 800;
-const KEYWORD_MAX_STRING: u32 = 16;
-const KEYWORD_MAX_COMMENT: u32 = 80;
-const IMAGESTRUCT_FRAMEWRITEMDSIZE: u32 = 100;
 const _SEMAPHORE_H: u32 = 1;
 const _FEATURES_H: u32 = 1;
 const _DEFAULT_SOURCE: u32 = 1;
@@ -216,17 +84,12 @@ const __PDP_ENDIAN: u32 = 3412;
 const _BITS_ENDIANNESS_H: u32 = 1;
 const __BYTE_ORDER: u32 = 1234;
 const __FLOAT_WORD_ORDER: u32 = 1234;
-const LITTLE_ENDIAN: u32 = 1234;
-const BIG_ENDIAN: u32 = 4321;
-const PDP_ENDIAN: u32 = 3412;
-const BYTE_ORDER: u32 = 1234;
 const _BITS_BYTESWAP_H: u32 = 1;
 const _BITS_UINTN_IDENTITY_H: u32 = 1;
 const _SYS_SELECT_H: u32 = 1;
 const __sigset_t_defined: u32 = 1;
 const __timeval_defined: u32 = 1;
 const _STRUCT_TIMESPEC: u32 = 1;
-const FD_SETSIZE: u32 = 1024;
 const _BITS_PTHREADTYPES_COMMON_H: u32 = 1;
 const _THREAD_SHARED_TYPES_H: u32 = 1;
 const _BITS_PTHREADTYPES_ARCH_H: u32 = 1;
@@ -254,43 +117,6 @@ const __GLIBC_USE_IEC_60559_TYPES_EXT: u32 = 0;
 const _BITS_WCHAR_H: u32 = 1;
 const _BITS_STDINT_UINTN_H: u32 = 1;
 const _BITS_STDINT_LEAST_H: u32 = 1;
-const INT8_MIN: i32 = -128;
-const INT16_MIN: i32 = -32768;
-const INT32_MIN: i32 = -2147483648;
-const INT8_MAX: u32 = 127;
-const INT16_MAX: u32 = 32767;
-const INT32_MAX: u32 = 2147483647;
-const UINT8_MAX: u32 = 255;
-const UINT16_MAX: u32 = 65535;
-const UINT32_MAX: u32 = 4294967295;
-const INT_LEAST8_MIN: i32 = -128;
-const INT_LEAST16_MIN: i32 = -32768;
-const INT_LEAST32_MIN: i32 = -2147483648;
-const INT_LEAST8_MAX: u32 = 127;
-const INT_LEAST16_MAX: u32 = 32767;
-const INT_LEAST32_MAX: u32 = 2147483647;
-const UINT_LEAST8_MAX: u32 = 255;
-const UINT_LEAST16_MAX: u32 = 65535;
-const UINT_LEAST32_MAX: u32 = 4294967295;
-const INT_FAST8_MIN: i32 = -128;
-const INT_FAST16_MIN: i64 = -9223372036854775808;
-const INT_FAST32_MIN: i64 = -9223372036854775808;
-const INT_FAST8_MAX: u32 = 127;
-const INT_FAST16_MAX: u64 = 9223372036854775807;
-const INT_FAST32_MAX: u64 = 9223372036854775807;
-const UINT_FAST8_MAX: u32 = 255;
-const UINT_FAST16_MAX: i32 = -1;
-const UINT_FAST32_MAX: i32 = -1;
-const INTPTR_MIN: i64 = -9223372036854775808;
-const INTPTR_MAX: u64 = 9223372036854775807;
-const UINTPTR_MAX: i32 = -1;
-const PTRDIFF_MIN: i64 = -9223372036854775808;
-const PTRDIFF_MAX: u64 = 9223372036854775807;
-const SIG_ATOMIC_MIN: i32 = -2147483648;
-const SIG_ATOMIC_MAX: u32 = 2147483647;
-const SIZE_MAX: i32 = -1;
-const WINT_MIN: u32 = 0;
-const WINT_MAX: u32 = 4294967295;
 const _STDIO_H: u32 = 1;
 const _____fpos_t_defined: u32 = 1;
 const ____mbstate_t_defined: u32 = 1;
@@ -305,18 +131,7 @@ const __cookie_io_functions_t_defined: u32 = 1;
 const _IOFBF: u32 = 0;
 const _IOLBF: u32 = 1;
 const _IONBF: u32 = 2;
-const BUFSIZ: u32 = 8192;
-const EOF: i32 = -1;
-const SEEK_SET: u32 = 0;
-const SEEK_CUR: u32 = 1;
-const SEEK_END: u32 = 2;
-const P_tmpdir: &[u8; 5] = b"/tmp\0";
-const L_tmpnam: u32 = 20;
-const TMP_MAX: u32 = 238328;
 const _BITS_STDIO_LIM_H: u32 = 1;
-const FILENAME_MAX: u32 = 4096;
-const L_ctermid: u32 = 9;
-const FOPEN_MAX: u32 = 16;
 const __HAVE_FLOAT128: u32 = 1;
 const __HAVE_DISTINCT_FLOAT128: u32 = 1;
 const __HAVE_FLOAT64X: u32 = 1;
@@ -334,12 +149,6 @@ const __HAVE_DISTINCT_FLOAT64X: u32 = 0;
 const __HAVE_DISTINCT_FLOAT128X: u32 = 0;
 const __HAVE_FLOATN_NOT_TYPEDEF: u32 = 0;
 const _STDLIB_H: u32 = 1;
-const WNOHANG: u32 = 1;
-const WUNTRACED: u32 = 2;
-const WSTOPPED: u32 = 2;
-const WEXITED: u32 = 4;
-const WCONTINUED: u32 = 8;
-const WNOWAIT: u32 = 16777216;
 const __WNOTHREAD: u32 = 536870912;
 const __WALL: u32 = 1073741824;
 const __WCLONE: u32 = 2147483648;
@@ -347,9 +156,6 @@ const __W_CONTINUED: u32 = 65535;
 const __WCOREFLAG: u32 = 128;
 const __ldiv_t_defined: u32 = 1;
 const __lldiv_t_defined: u32 = 1;
-const RAND_MAX: u32 = 2147483647;
-const EXIT_FAILURE: u32 = 1;
-const EXIT_SUCCESS: u32 = 0;
 const _ALLOCA_H: u32 = 1;
 const _UNISTD_H: u32 = 1;
 const _POSIX_VERSION: u32 = 200809;
@@ -442,107 +248,38 @@ const __ILP32_OFFBIG_CFLAGS: &[u8; 48] = b"-m32 -D_LARGEFILE_SOURCE -D_FILE_OFFS
 const __ILP32_OFFBIG_LDFLAGS: &[u8; 5] = b"-m32\0";
 const __LP64_OFF64_CFLAGS: &[u8; 5] = b"-m64\0";
 const __LP64_OFF64_LDFLAGS: &[u8; 5] = b"-m64\0";
-const STDIN_FILENO: u32 = 0;
-const STDOUT_FILENO: u32 = 1;
-const STDERR_FILENO: u32 = 2;
-const R_OK: u32 = 4;
-const W_OK: u32 = 2;
-const X_OK: u32 = 1;
-const F_OK: u32 = 0;
-const L_SET: u32 = 0;
-const L_INCR: u32 = 1;
-const L_XTND: u32 = 2;
 const _GETOPT_POSIX_H: u32 = 1;
 const _GETOPT_CORE_H: u32 = 1;
-const F_ULOCK: u32 = 0;
-const F_LOCK: u32 = 1;
-const F_TLOCK: u32 = 2;
-const F_TEST: u32 = 3;
 const _TIME_H: u32 = 1;
 const _BITS_TIME_H: u32 = 1;
-const CLOCK_REALTIME: u32 = 0;
-const CLOCK_MONOTONIC: u32 = 1;
-const CLOCK_PROCESS_CPUTIME_ID: u32 = 2;
-const CLOCK_THREAD_CPUTIME_ID: u32 = 3;
-const CLOCK_MONOTONIC_RAW: u32 = 4;
-const CLOCK_REALTIME_COARSE: u32 = 5;
-const CLOCK_MONOTONIC_COARSE: u32 = 6;
-const CLOCK_BOOTTIME: u32 = 7;
-const CLOCK_REALTIME_ALARM: u32 = 8;
-const CLOCK_BOOTTIME_ALARM: u32 = 9;
 pub const CLOCK_TAI: u32 = 11;
-const TIMER_ABSTIME: u32 = 1;
 const __struct_tm_defined: u32 = 1;
 const __itimerspec_defined: u32 = 1;
 const _BITS_TYPES_LOCALE_T_H: u32 = 1;
 const _BITS_TYPES___LOCALE_T_H: u32 = 1;
-const TIME_UTC: u32 = 1;
-const IMAGESTREAMIO_SUCCESS: u32 = 0;
-const IMAGESTREAMIO_FAILURE: u32 = 1;
-const IMAGESTREAMIO_INVALIDARG: u32 = 10;
-const IMAGESTREAMIO_NOTIMPL: u32 = 20;
-const IMAGESTREAMIO_BADALLOC: u32 = 30;
-const IMAGESTREAMIO_FILEOPEN: u32 = 40;
-const IMAGESTREAMIO_FILESEEK: u32 = 42;
-const IMAGESTREAMIO_FILEWRITE: u32 = 44;
-const IMAGESTREAMIO_FILEEXISTS: u32 = 46;
-const IMAGESTREAMIO_INODE: u32 = 48;
-const IMAGESTREAMIO_MMAP: u32 = 50;
-const IMAGESTREAMIO_SEMINIT: u32 = 60;
-const IMAGESTREAMIO_VERSION: u32 = 100;
-const SHAREDMEMDIR: &[u8; 10] = b"/milk/shm\0";
-const SEMAPHORE_MAXVAL: u32 = 10;
 pub const SEMAPHORE_INITVAL: u32 = 0;
 pub const IMAGE_NB_SEMAPHORE: u32 = 10;
 pub const IMAGE_NB_PROCTRACE: u32 = 10;
-const GPU_IMAGE_PLACEHOLDER: u32 = 0;
 const _DATATYPE_UNINITIALIZED: u32 = 0;
 const _DATATYPE_UINT8: u32 = 1;
-const SIZEOF_DATATYPE_UINT8: u32 = 1;
 const _DATATYPE_INT8: u32 = 2;
-const SIZEOF_DATATYPE_INT8: u32 = 1;
 const _DATATYPE_UINT16: u32 = 3;
-const SIZEOF_DATATYPE_UINT16: u32 = 2;
 const _DATATYPE_INT16: u32 = 4;
-const SIZEOF_DATATYPE_INT16: u32 = 2;
 const _DATATYPE_UINT32: u32 = 5;
-const SIZEOF_DATATYPE_UINT32: u32 = 4;
 const _DATATYPE_INT32: u32 = 6;
-const SIZEOF_DATATYPE_INT32: u32 = 4;
 const _DATATYPE_UINT64: u32 = 7;
-const SIZEOF_DATATYPE_UINT64: u32 = 8;
 const _DATATYPE_INT64: u32 = 8;
-const SIZEOF_DATATYPE_INT64: u32 = 8;
 const _DATATYPE_HALF: u32 = 13;
-const SIZEOF_DATATYPE_HALF: u32 = 2;
 const _DATATYPE_FLOAT: u32 = 9;
-const SIZEOF_DATATYPE_FLOAT: u32 = 4;
 const _DATATYPE_DOUBLE: u32 = 10;
-const SIZEOF_DATATYPE_DOUBLE: u32 = 8;
 const _DATATYPE_COMPLEX_FLOAT: u32 = 11;
-const SIZEOF_DATATYPE_COMPLEX_FLOAT: u32 = 8;
 const _DATATYPE_COMPLEX_DOUBLE: u32 = 12;
-const SIZEOF_DATATYPE_COMPLEX_DOUBLE: u32 = 16;
 const _DATATYPE_EVENT_UI8_UI8_UI16_UI8: u32 = 20;
-const SIZEOF_DATATYPE_EVENT_UI8_UI8_UI16_UI8: u32 = 5;
-const Dtype: u32 = 9;
-const CDtype: u32 = 11;
-const IMAGE_SEMAPHORE_CONTROL_READY: u32 = 1;
-const IMAGE_SEMAPHORE_STATUS_CONNECTED: u32 = 1;
-const IMAGE_SEMAPHORE_STATUS_SEMWAIT: u32 = 2;
-const IMAGE_SEMAPHORE_STATUS_SEMREADYWAIT: u32 = 4;
-const IMAGE_SEMAPHORE_STATUS_SEMTIMEOUT: u32 = 8;
-const CIRCULAR_BUFFER: u32 = 1;
-const MATH_DATA: u32 = 2;
-const IMG_RECV: u32 = 4;
-const IMG_SENT: u32 = 8;
 pub const ZAXIS_UNDEF: u32 = 0;
 pub const ZAXIS_SPACIAL: u32 = 65536;
 pub const ZAXIS_TEMPORAL: u32 = 131072;
 pub const ZAXIS_WAVELENGTH: u32 = 196608;
 pub const ZAXIS_MAPPING: u32 = 262144;
-const MAX_NB_PARTIAL_PACKET: u32 = 512;
-const STRINGMAXLEN_SEMFILENAME: u32 = 200;
 type __u_char = ::std::os::raw::c_uchar;
 type __u_short = ::std::os::raw::c_ushort;
 type __u_int = ::std::os::raw::c_uint;
@@ -616,38 +353,9 @@ type __caddr_t = *mut ::std::os::raw::c_char;
 type __intptr_t = ::std::os::raw::c_long;
 type __socklen_t = ::std::os::raw::c_uint;
 type __sig_atomic_t = ::std::os::raw::c_int;
-type u_char = __u_char;
-type u_short = __u_short;
-type u_int = __u_int;
-type u_long = __u_long;
-type quad_t = __quad_t;
-type u_quad_t = __u_quad_t;
-type fsid_t = __fsid_t;
-type loff_t = __loff_t;
 type ino_t = __ino_t;
-type dev_t = __dev_t;
-type gid_t = __gid_t;
-type mode_t = __mode_t;
-type nlink_t = __nlink_t;
-type uid_t = __uid_t;
-type off_t = __off_t;
 type pid_t = __pid_t;
-type id_t = __id_t;
-type daddr_t = __daddr_t;
-type caddr_t = __caddr_t;
-type key_t = __key_t;
-type clock_t = __clock_t;
 type clockid_t = __clockid_t;
-type time_t = __time_t;
-type timer_t = __timer_t;
-type ulong = ::std::os::raw::c_ulong;
-type ushort = ::std::os::raw::c_ushort;
-type uint = ::std::os::raw::c_uint;
-type u_int8_t = __uint8_t;
-type u_int16_t = __uint16_t;
-type u_int32_t = __uint32_t;
-type u_int64_t = __uint64_t;
-type register_t = ::std::os::raw::c_long;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 struct __sigset_t {
@@ -659,7 +367,6 @@ const _: () = {
     ["Alignment of __sigset_t"][::std::mem::align_of::<__sigset_t>() - 8usize];
     ["Offset of field: __sigset_t::__val"][::std::mem::offset_of!(__sigset_t, __val) - 0usize];
 };
-type sigset_t = __sigset_t;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct timeval {
@@ -694,7 +401,6 @@ const _: () = {
     ["Offset of field: timespec::tv_sec"][::std::mem::offset_of!(timespec, tv_sec) - 0usize];
     ["Offset of field: timespec::tv_nsec"][::std::mem::offset_of!(timespec, tv_nsec) - 8usize];
 };
-type suseconds_t = __suseconds_t;
 type __fd_mask = ::std::os::raw::c_long;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -708,29 +414,6 @@ const _: () = {
     ["Offset of field: fd_set::__fds_bits"][::std::mem::offset_of!(fd_set, __fds_bits) - 0usize];
 };
 pub type fd_mask = __fd_mask;
-unsafe extern "C" {
-    pub fn select(
-        __nfds: ::std::os::raw::c_int,
-        __readfds: *mut fd_set,
-        __writefds: *mut fd_set,
-        __exceptfds: *mut fd_set,
-        __timeout: *mut timeval,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub fn pselect(
-        __nfds: ::std::os::raw::c_int,
-        __readfds: *mut fd_set,
-        __writefds: *mut fd_set,
-        __exceptfds: *mut fd_set,
-        __timeout: *const timespec,
-        __sigmask: *const __sigset_t,
-    ) -> ::std::os::raw::c_int;
-}
-type blksize_t = __blksize_t;
-type blkcnt_t = __blkcnt_t;
-type fsblkcnt_t = __fsblkcnt_t;
-type fsfilcnt_t = __fsfilcnt_t;
 #[repr(C)]
 #[derive(Copy, Clone)]
 union __atomic_wide_counter {
@@ -921,7 +604,6 @@ const _: () = {
     ["Alignment of __once_flag"][::std::mem::align_of::<__once_flag>() - 4usize];
     ["Offset of field: __once_flag::__data"][::std::mem::offset_of!(__once_flag, __data) - 0usize];
 };
-type pthread_t = ::std::os::raw::c_ulong;
 #[repr(C)]
 #[derive(Copy, Clone)]
 union pthread_mutexattr_t {
@@ -952,8 +634,6 @@ const _: () = {
     ["Offset of field: pthread_condattr_t::__align"]
         [::std::mem::offset_of!(pthread_condattr_t, __align) - 0usize];
 };
-type pthread_key_t = ::std::os::raw::c_uint;
-type pthread_once_t = ::std::os::raw::c_int;
 #[repr(C)]
 #[derive(Copy, Clone)]
 union pthread_attr_t {
@@ -1038,7 +718,6 @@ const _: () = {
     ["Offset of field: pthread_rwlockattr_t::__align"]
         [::std::mem::offset_of!(pthread_rwlockattr_t, __align) - 0usize];
 };
-type pthread_spinlock_t = ::std::os::raw::c_int;
 #[repr(C)]
 #[derive(Copy, Clone)]
 union pthread_barrier_t {
@@ -1091,56 +770,6 @@ unsafe extern "C" {
         __value: ::std::os::raw::c_uint,
     ) -> ::std::os::raw::c_int;
 }
-unsafe extern "C" {
-    fn sem_destroy(__sem: *mut sem_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn sem_open(
-        __name: *const ::std::os::raw::c_char,
-        __oflag: ::std::os::raw::c_int,
-        ...
-    ) -> *mut sem_t;
-}
-unsafe extern "C" {
-    fn sem_close(__sem: *mut sem_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn sem_unlink(__name: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn sem_wait(__sem: *mut sem_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn sem_timedwait(__sem: *mut sem_t, __abstime: *const timespec) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn sem_trywait(__sem: *mut sem_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn sem_post(__sem: *mut sem_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn sem_getvalue(__sem: *mut sem_t, __sval: *mut ::std::os::raw::c_int)
-    -> ::std::os::raw::c_int;
-}
-type int_least8_t = __int_least8_t;
-type int_least16_t = __int_least16_t;
-type int_least32_t = __int_least32_t;
-type int_least64_t = __int_least64_t;
-type uint_least8_t = __uint_least8_t;
-type uint_least16_t = __uint_least16_t;
-type uint_least32_t = __uint_least32_t;
-type uint_least64_t = __uint_least64_t;
-type int_fast8_t = ::std::os::raw::c_schar;
-type int_fast16_t = ::std::os::raw::c_long;
-type int_fast32_t = ::std::os::raw::c_long;
-type int_fast64_t = ::std::os::raw::c_long;
-type uint_fast8_t = ::std::os::raw::c_uchar;
-type uint_fast16_t = ::std::os::raw::c_ulong;
-type uint_fast32_t = ::std::os::raw::c_ulong;
-type uint_fast64_t = ::std::os::raw::c_ulong;
-type intmax_t = __intmax_t;
-type uintmax_t = __uintmax_t;
 type __gnuc_va_list = __builtin_va_list;
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -1204,7 +833,6 @@ const _: () = {
 };
 type __fpos64_t = _G_fpos64_t;
 type __FILE = _IO_FILE;
-type FILE = _IO_FILE;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 struct _IO_marker {
@@ -1315,50 +943,6 @@ const _: () = {
         [::std::mem::offset_of!(_IO_FILE, _total_written) - 200usize];
     ["Offset of field: _IO_FILE::_unused2"][::std::mem::offset_of!(_IO_FILE, _unused2) - 208usize];
 };
-impl _IO_FILE {
-    #[inline]
-    fn _flags2(&self) -> ::std::os::raw::c_int {
-        unsafe { ::std::mem::transmute(self._bitfield_1.get(0usize, 24u8) as u32) }
-    }
-    #[inline]
-    fn set__flags2(&mut self, val: ::std::os::raw::c_int) {
-        unsafe {
-            let val: u32 = ::std::mem::transmute(val);
-            self._bitfield_1.set(0usize, 24u8, val as u64)
-        }
-    }
-    #[inline]
-    unsafe fn _flags2_raw(this: *const Self) -> ::std::os::raw::c_int {
-        unsafe {
-            ::std::mem::transmute(<__BindgenBitfieldUnit<[u8; 3usize]>>::raw_get(
-                ::std::ptr::addr_of!((*this)._bitfield_1),
-                0usize,
-                24u8,
-            ) as u32)
-        }
-    }
-    #[inline]
-    unsafe fn set__flags2_raw(this: *mut Self, val: ::std::os::raw::c_int) {
-        unsafe {
-            let val: u32 = ::std::mem::transmute(val);
-            <__BindgenBitfieldUnit<[u8; 3usize]>>::raw_set(
-                ::std::ptr::addr_of_mut!((*this)._bitfield_1),
-                0usize,
-                24u8,
-                val as u64,
-            )
-        }
-    }
-    #[inline]
-    fn new_bitfield_1(_flags2: ::std::os::raw::c_int) -> __BindgenBitfieldUnit<[u8; 3usize]> {
-        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 3usize]> = Default::default();
-        __bindgen_bitfield_unit.set(0usize, 24u8, {
-            let _flags2: u32 = unsafe { ::std::mem::transmute(_flags2) };
-            _flags2 as u64
-        });
-        __bindgen_bitfield_unit
-    }
-}
 type cookie_read_function_t = ::std::option::Option<
     unsafe extern "C" fn(
         __cookie: *mut ::std::os::raw::c_void,
@@ -1406,483 +990,12 @@ const _: () = {
     ["Offset of field: _IO_cookie_io_functions_t::close"]
         [::std::mem::offset_of!(_IO_cookie_io_functions_t, close) - 24usize];
 };
-type cookie_io_functions_t = _IO_cookie_io_functions_t;
-type va_list = __gnuc_va_list;
-type fpos_t = __fpos_t;
-unsafe extern "C" {
-    static mut stdin: *mut FILE;
-}
-unsafe extern "C" {
-    static mut stdout: *mut FILE;
-}
-unsafe extern "C" {
-    static mut stderr: *mut FILE;
-}
-unsafe extern "C" {
-    fn remove(__filename: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn rename(
-        __old: *const ::std::os::raw::c_char,
-        __new: *const ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn renameat(
-        __oldfd: ::std::os::raw::c_int,
-        __old: *const ::std::os::raw::c_char,
-        __newfd: ::std::os::raw::c_int,
-        __new: *const ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fclose(__stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn tmpfile() -> *mut FILE;
-}
-unsafe extern "C" {
-    fn tmpnam(arg1: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn tmpnam_r(__s: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn tempnam(
-        __dir: *const ::std::os::raw::c_char,
-        __pfx: *const ::std::os::raw::c_char,
-    ) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn fflush(__stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fflush_unlocked(__stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fopen(
-        __filename: *const ::std::os::raw::c_char,
-        __modes: *const ::std::os::raw::c_char,
-    ) -> *mut FILE;
-}
-unsafe extern "C" {
-    fn freopen(
-        __filename: *const ::std::os::raw::c_char,
-        __modes: *const ::std::os::raw::c_char,
-        __stream: *mut FILE,
-    ) -> *mut FILE;
-}
-unsafe extern "C" {
-    fn fdopen(__fd: ::std::os::raw::c_int, __modes: *const ::std::os::raw::c_char) -> *mut FILE;
-}
-unsafe extern "C" {
-    fn fopencookie(
-        __magic_cookie: *mut ::std::os::raw::c_void,
-        __modes: *const ::std::os::raw::c_char,
-        __io_funcs: cookie_io_functions_t,
-    ) -> *mut FILE;
-}
-unsafe extern "C" {
-    fn fmemopen(
-        __s: *mut ::std::os::raw::c_void,
-        __len: usize,
-        __modes: *const ::std::os::raw::c_char,
-    ) -> *mut FILE;
-}
-unsafe extern "C" {
-    fn open_memstream(
-        __bufloc: *mut *mut ::std::os::raw::c_char,
-        __sizeloc: *mut usize,
-    ) -> *mut FILE;
-}
-unsafe extern "C" {
-    fn setbuf(__stream: *mut FILE, __buf: *mut ::std::os::raw::c_char);
-}
-unsafe extern "C" {
-    fn setvbuf(
-        __stream: *mut FILE,
-        __buf: *mut ::std::os::raw::c_char,
-        __modes: ::std::os::raw::c_int,
-        __n: usize,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn setbuffer(__stream: *mut FILE, __buf: *mut ::std::os::raw::c_char, __size: usize);
-}
-unsafe extern "C" {
-    fn setlinebuf(__stream: *mut FILE);
-}
-unsafe extern "C" {
-    fn fprintf(
-        __stream: *mut FILE,
-        __format: *const ::std::os::raw::c_char,
-        ...
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn printf(__format: *const ::std::os::raw::c_char, ...) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn sprintf(
-        __s: *mut ::std::os::raw::c_char,
-        __format: *const ::std::os::raw::c_char,
-        ...
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn vfprintf(
-        __s: *mut FILE,
-        __format: *const ::std::os::raw::c_char,
-        __arg: *mut __va_list_tag,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn vprintf(
-        __format: *const ::std::os::raw::c_char,
-        __arg: *mut __va_list_tag,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn vsprintf(
-        __s: *mut ::std::os::raw::c_char,
-        __format: *const ::std::os::raw::c_char,
-        __arg: *mut __va_list_tag,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn snprintf(
-        __s: *mut ::std::os::raw::c_char,
-        __maxlen: ::std::os::raw::c_ulong,
-        __format: *const ::std::os::raw::c_char,
-        ...
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn vsnprintf(
-        __s: *mut ::std::os::raw::c_char,
-        __maxlen: ::std::os::raw::c_ulong,
-        __format: *const ::std::os::raw::c_char,
-        __arg: *mut __va_list_tag,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn vasprintf(
-        __ptr: *mut *mut ::std::os::raw::c_char,
-        __f: *const ::std::os::raw::c_char,
-        __arg: *mut __va_list_tag,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn __asprintf(
-        __ptr: *mut *mut ::std::os::raw::c_char,
-        __fmt: *const ::std::os::raw::c_char,
-        ...
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn asprintf(
-        __ptr: *mut *mut ::std::os::raw::c_char,
-        __fmt: *const ::std::os::raw::c_char,
-        ...
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn vdprintf(
-        __fd: ::std::os::raw::c_int,
-        __fmt: *const ::std::os::raw::c_char,
-        __arg: *mut __va_list_tag,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn dprintf(
-        __fd: ::std::os::raw::c_int,
-        __fmt: *const ::std::os::raw::c_char,
-        ...
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fscanf(
-        __stream: *mut FILE,
-        __format: *const ::std::os::raw::c_char,
-        ...
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn scanf(__format: *const ::std::os::raw::c_char, ...) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn sscanf(
-        __s: *const ::std::os::raw::c_char,
-        __format: *const ::std::os::raw::c_char,
-        ...
-    ) -> ::std::os::raw::c_int;
-}
 type __cfloat128 = __BindgenComplex<u128>;
 type _Float128 = u128;
 type _Float32 = f32;
 type _Float64 = f64;
 type _Float32x = f64;
 type _Float64x = u128;
-unsafe extern "C" {
-    #[link_name = "\u{1}__isoc99_fscanf"]
-    fn fscanf1(
-        __stream: *mut FILE,
-        __format: *const ::std::os::raw::c_char,
-        ...
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    #[link_name = "\u{1}__isoc99_scanf"]
-    fn scanf1(__format: *const ::std::os::raw::c_char, ...) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    #[link_name = "\u{1}__isoc99_sscanf"]
-    fn sscanf1(
-        __s: *const ::std::os::raw::c_char,
-        __format: *const ::std::os::raw::c_char,
-        ...
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn vfscanf(
-        __s: *mut FILE,
-        __format: *const ::std::os::raw::c_char,
-        __arg: *mut __va_list_tag,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn vscanf(
-        __format: *const ::std::os::raw::c_char,
-        __arg: *mut __va_list_tag,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn vsscanf(
-        __s: *const ::std::os::raw::c_char,
-        __format: *const ::std::os::raw::c_char,
-        __arg: *mut __va_list_tag,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    #[link_name = "\u{1}__isoc99_vfscanf"]
-    fn vfscanf1(
-        __s: *mut FILE,
-        __format: *const ::std::os::raw::c_char,
-        __arg: *mut __va_list_tag,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    #[link_name = "\u{1}__isoc99_vscanf"]
-    fn vscanf1(
-        __format: *const ::std::os::raw::c_char,
-        __arg: *mut __va_list_tag,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    #[link_name = "\u{1}__isoc99_vsscanf"]
-    fn vsscanf1(
-        __s: *const ::std::os::raw::c_char,
-        __format: *const ::std::os::raw::c_char,
-        __arg: *mut __va_list_tag,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fgetc(__stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn getc(__stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn getchar() -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn getc_unlocked(__stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn getchar_unlocked() -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fgetc_unlocked(__stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fputc(__c: ::std::os::raw::c_int, __stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn putc(__c: ::std::os::raw::c_int, __stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn putchar(__c: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fputc_unlocked(__c: ::std::os::raw::c_int, __stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn putc_unlocked(__c: ::std::os::raw::c_int, __stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn putchar_unlocked(__c: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn getw(__stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn putw(__w: ::std::os::raw::c_int, __stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fgets(
-        __s: *mut ::std::os::raw::c_char,
-        __n: ::std::os::raw::c_int,
-        __stream: *mut FILE,
-    ) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn __getdelim(
-        __lineptr: *mut *mut ::std::os::raw::c_char,
-        __n: *mut usize,
-        __delimiter: ::std::os::raw::c_int,
-        __stream: *mut FILE,
-    ) -> __ssize_t;
-}
-unsafe extern "C" {
-    fn getdelim(
-        __lineptr: *mut *mut ::std::os::raw::c_char,
-        __n: *mut usize,
-        __delimiter: ::std::os::raw::c_int,
-        __stream: *mut FILE,
-    ) -> __ssize_t;
-}
-unsafe extern "C" {
-    fn getline(
-        __lineptr: *mut *mut ::std::os::raw::c_char,
-        __n: *mut usize,
-        __stream: *mut FILE,
-    ) -> __ssize_t;
-}
-unsafe extern "C" {
-    fn fputs(__s: *const ::std::os::raw::c_char, __stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn puts(__s: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn ungetc(__c: ::std::os::raw::c_int, __stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fread(
-        __ptr: *mut ::std::os::raw::c_void,
-        __size: ::std::os::raw::c_ulong,
-        __n: ::std::os::raw::c_ulong,
-        __stream: *mut FILE,
-    ) -> ::std::os::raw::c_ulong;
-}
-unsafe extern "C" {
-    fn fwrite(
-        __ptr: *const ::std::os::raw::c_void,
-        __size: ::std::os::raw::c_ulong,
-        __n: ::std::os::raw::c_ulong,
-        __s: *mut FILE,
-    ) -> ::std::os::raw::c_ulong;
-}
-unsafe extern "C" {
-    fn fread_unlocked(
-        __ptr: *mut ::std::os::raw::c_void,
-        __size: usize,
-        __n: usize,
-        __stream: *mut FILE,
-    ) -> usize;
-}
-unsafe extern "C" {
-    fn fwrite_unlocked(
-        __ptr: *const ::std::os::raw::c_void,
-        __size: usize,
-        __n: usize,
-        __stream: *mut FILE,
-    ) -> usize;
-}
-unsafe extern "C" {
-    fn fseek(
-        __stream: *mut FILE,
-        __off: ::std::os::raw::c_long,
-        __whence: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn ftell(__stream: *mut FILE) -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    fn rewind(__stream: *mut FILE);
-}
-unsafe extern "C" {
-    fn fseeko(
-        __stream: *mut FILE,
-        __off: __off_t,
-        __whence: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn ftello(__stream: *mut FILE) -> __off_t;
-}
-unsafe extern "C" {
-    fn fgetpos(__stream: *mut FILE, __pos: *mut fpos_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fsetpos(__stream: *mut FILE, __pos: *const fpos_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn clearerr(__stream: *mut FILE);
-}
-unsafe extern "C" {
-    fn feof(__stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn ferror(__stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn clearerr_unlocked(__stream: *mut FILE);
-}
-unsafe extern "C" {
-    fn feof_unlocked(__stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn ferror_unlocked(__stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn perror(__s: *const ::std::os::raw::c_char);
-}
-unsafe extern "C" {
-    fn fileno(__stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fileno_unlocked(__stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn pclose(__stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn popen(
-        __command: *const ::std::os::raw::c_char,
-        __modes: *const ::std::os::raw::c_char,
-    ) -> *mut FILE;
-}
-unsafe extern "C" {
-    fn ctermid(__s: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn flockfile(__stream: *mut FILE);
-}
-unsafe extern "C" {
-    fn ftrylockfile(__stream: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn funlockfile(__stream: *mut FILE);
-}
-unsafe extern "C" {
-    fn __uflow(arg1: *mut FILE) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn __overflow(arg1: *mut FILE, arg2: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-type wchar_t = ::std::os::raw::c_int;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 struct div_t {
@@ -1925,100 +1038,6 @@ const _: () = {
 unsafe extern "C" {
     fn __ctype_get_mb_cur_max() -> usize;
 }
-unsafe extern "C" {
-    fn atof(__nptr: *const ::std::os::raw::c_char) -> f64;
-}
-unsafe extern "C" {
-    fn atoi(__nptr: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn atol(__nptr: *const ::std::os::raw::c_char) -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    fn atoll(__nptr: *const ::std::os::raw::c_char) -> ::std::os::raw::c_longlong;
-}
-unsafe extern "C" {
-    fn strtod(
-        __nptr: *const ::std::os::raw::c_char,
-        __endptr: *mut *mut ::std::os::raw::c_char,
-    ) -> f64;
-}
-unsafe extern "C" {
-    fn strtof(
-        __nptr: *const ::std::os::raw::c_char,
-        __endptr: *mut *mut ::std::os::raw::c_char,
-    ) -> f32;
-}
-unsafe extern "C" {
-    fn strtold(
-        __nptr: *const ::std::os::raw::c_char,
-        __endptr: *mut *mut ::std::os::raw::c_char,
-    ) -> u128;
-}
-unsafe extern "C" {
-    fn strtol(
-        __nptr: *const ::std::os::raw::c_char,
-        __endptr: *mut *mut ::std::os::raw::c_char,
-        __base: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    fn strtoul(
-        __nptr: *const ::std::os::raw::c_char,
-        __endptr: *mut *mut ::std::os::raw::c_char,
-        __base: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_ulong;
-}
-unsafe extern "C" {
-    fn strtoq(
-        __nptr: *const ::std::os::raw::c_char,
-        __endptr: *mut *mut ::std::os::raw::c_char,
-        __base: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_longlong;
-}
-unsafe extern "C" {
-    fn strtouq(
-        __nptr: *const ::std::os::raw::c_char,
-        __endptr: *mut *mut ::std::os::raw::c_char,
-        __base: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_ulonglong;
-}
-unsafe extern "C" {
-    fn strtoll(
-        __nptr: *const ::std::os::raw::c_char,
-        __endptr: *mut *mut ::std::os::raw::c_char,
-        __base: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_longlong;
-}
-unsafe extern "C" {
-    fn strtoull(
-        __nptr: *const ::std::os::raw::c_char,
-        __endptr: *mut *mut ::std::os::raw::c_char,
-        __base: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_ulonglong;
-}
-unsafe extern "C" {
-    fn l64a(__n: ::std::os::raw::c_long) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn a64l(__s: *const ::std::os::raw::c_char) -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    fn random() -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    fn srandom(__seed: ::std::os::raw::c_uint);
-}
-unsafe extern "C" {
-    fn initstate(
-        __seed: ::std::os::raw::c_uint,
-        __statebuf: *mut ::std::os::raw::c_char,
-        __statelen: usize,
-    ) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn setstate(__statebuf: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 struct random_data {
@@ -2046,62 +1065,6 @@ const _: () = {
     ["Offset of field: random_data::end_ptr"]
         [::std::mem::offset_of!(random_data, end_ptr) - 40usize];
 };
-unsafe extern "C" {
-    fn random_r(__buf: *mut random_data, __result: *mut i32) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn srandom_r(__seed: ::std::os::raw::c_uint, __buf: *mut random_data) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn initstate_r(
-        __seed: ::std::os::raw::c_uint,
-        __statebuf: *mut ::std::os::raw::c_char,
-        __statelen: usize,
-        __buf: *mut random_data,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn setstate_r(
-        __statebuf: *mut ::std::os::raw::c_char,
-        __buf: *mut random_data,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn rand() -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn srand(__seed: ::std::os::raw::c_uint);
-}
-unsafe extern "C" {
-    fn rand_r(__seed: *mut ::std::os::raw::c_uint) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn drand48() -> f64;
-}
-unsafe extern "C" {
-    fn erand48(__xsubi: *mut ::std::os::raw::c_ushort) -> f64;
-}
-unsafe extern "C" {
-    fn lrand48() -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    fn nrand48(__xsubi: *mut ::std::os::raw::c_ushort) -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    fn mrand48() -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    fn jrand48(__xsubi: *mut ::std::os::raw::c_ushort) -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    fn srand48(__seedval: ::std::os::raw::c_long);
-}
-unsafe extern "C" {
-    fn seed48(__seed16v: *mut ::std::os::raw::c_ushort) -> *mut ::std::os::raw::c_ushort;
-}
-unsafe extern "C" {
-    fn lcong48(__param: *mut ::std::os::raw::c_ushort);
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 struct drand48_data {
@@ -2124,185 +1087,7 @@ const _: () = {
     ["Offset of field: drand48_data::__a"][::std::mem::offset_of!(drand48_data, __a) - 16usize];
 };
 unsafe extern "C" {
-    fn drand48_r(__buffer: *mut drand48_data, __result: *mut f64) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn erand48_r(
-        __xsubi: *mut ::std::os::raw::c_ushort,
-        __buffer: *mut drand48_data,
-        __result: *mut f64,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn lrand48_r(
-        __buffer: *mut drand48_data,
-        __result: *mut ::std::os::raw::c_long,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn nrand48_r(
-        __xsubi: *mut ::std::os::raw::c_ushort,
-        __buffer: *mut drand48_data,
-        __result: *mut ::std::os::raw::c_long,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn mrand48_r(
-        __buffer: *mut drand48_data,
-        __result: *mut ::std::os::raw::c_long,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn jrand48_r(
-        __xsubi: *mut ::std::os::raw::c_ushort,
-        __buffer: *mut drand48_data,
-        __result: *mut ::std::os::raw::c_long,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn srand48_r(
-        __seedval: ::std::os::raw::c_long,
-        __buffer: *mut drand48_data,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn seed48_r(
-        __seed16v: *mut ::std::os::raw::c_ushort,
-        __buffer: *mut drand48_data,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn lcong48_r(
-        __param: *mut ::std::os::raw::c_ushort,
-        __buffer: *mut drand48_data,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn arc4random() -> __uint32_t;
-}
-unsafe extern "C" {
-    fn arc4random_buf(__buf: *mut ::std::os::raw::c_void, __size: usize);
-}
-unsafe extern "C" {
-    fn arc4random_uniform(__upper_bound: __uint32_t) -> __uint32_t;
-}
-unsafe extern "C" {
-    fn malloc(__size: ::std::os::raw::c_ulong) -> *mut ::std::os::raw::c_void;
-}
-unsafe extern "C" {
-    fn calloc(
-        __nmemb: ::std::os::raw::c_ulong,
-        __size: ::std::os::raw::c_ulong,
-    ) -> *mut ::std::os::raw::c_void;
-}
-unsafe extern "C" {
-    fn realloc(
-        __ptr: *mut ::std::os::raw::c_void,
-        __size: ::std::os::raw::c_ulong,
-    ) -> *mut ::std::os::raw::c_void;
-}
-unsafe extern "C" {
-    fn free(__ptr: *mut ::std::os::raw::c_void);
-}
-unsafe extern "C" {
-    fn reallocarray(
-        __ptr: *mut ::std::os::raw::c_void,
-        __nmemb: usize,
-        __size: usize,
-    ) -> *mut ::std::os::raw::c_void;
-}
-unsafe extern "C" {
-    fn alloca(__size: ::std::os::raw::c_ulong) -> *mut ::std::os::raw::c_void;
-}
-unsafe extern "C" {
-    fn valloc(__size: usize) -> *mut ::std::os::raw::c_void;
-}
-unsafe extern "C" {
-    fn posix_memalign(
-        __memptr: *mut *mut ::std::os::raw::c_void,
-        __alignment: usize,
-        __size: usize,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn aligned_alloc(
-        __alignment: ::std::os::raw::c_ulong,
-        __size: ::std::os::raw::c_ulong,
-    ) -> *mut ::std::os::raw::c_void;
-}
-unsafe extern "C" {
-    fn abort() -> !;
-}
-unsafe extern "C" {
-    fn atexit(__func: ::std::option::Option<unsafe extern "C" fn()>) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn at_quick_exit(
-        __func: ::std::option::Option<unsafe extern "C" fn()>,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn on_exit(
-        __func: ::std::option::Option<
-            unsafe extern "C" fn(
-                __status: ::std::os::raw::c_int,
-                __arg: *mut ::std::os::raw::c_void,
-            ),
-        >,
-        __arg: *mut ::std::os::raw::c_void,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn exit(__status: ::std::os::raw::c_int) -> !;
-}
-unsafe extern "C" {
-    fn quick_exit(__status: ::std::os::raw::c_int) -> !;
-}
-unsafe extern "C" {
     fn _Exit(__status: ::std::os::raw::c_int) -> !;
-}
-unsafe extern "C" {
-    fn getenv(__name: *const ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn putenv(__string: *mut ::std::os::raw::c_char) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn setenv(
-        __name: *const ::std::os::raw::c_char,
-        __value: *const ::std::os::raw::c_char,
-        __replace: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn unsetenv(__name: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn clearenv() -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn mktemp(__template: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn mkstemp(__template: *mut ::std::os::raw::c_char) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn mkstemps(
-        __template: *mut ::std::os::raw::c_char,
-        __suffixlen: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn mkdtemp(__template: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn system(__command: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn realpath(
-        __name: *const ::std::os::raw::c_char,
-        __resolved: *mut ::std::os::raw::c_char,
-    ) -> *mut ::std::os::raw::c_char;
 }
 type __compar_fn_t = ::std::option::Option<
     unsafe extern "C" fn(
@@ -2310,337 +1095,6 @@ type __compar_fn_t = ::std::option::Option<
         arg2: *const ::std::os::raw::c_void,
     ) -> ::std::os::raw::c_int,
 >;
-unsafe extern "C" {
-    fn bsearch(
-        __key: *const ::std::os::raw::c_void,
-        __base: *const ::std::os::raw::c_void,
-        __nmemb: usize,
-        __size: usize,
-        __compar: __compar_fn_t,
-    ) -> *mut ::std::os::raw::c_void;
-}
-unsafe extern "C" {
-    fn qsort(
-        __base: *mut ::std::os::raw::c_void,
-        __nmemb: usize,
-        __size: usize,
-        __compar: __compar_fn_t,
-    );
-}
-unsafe extern "C" {
-    fn abs(__x: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn labs(__x: ::std::os::raw::c_long) -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    fn llabs(__x: ::std::os::raw::c_longlong) -> ::std::os::raw::c_longlong;
-}
-unsafe extern "C" {
-    fn div(__numer: ::std::os::raw::c_int, __denom: ::std::os::raw::c_int) -> div_t;
-}
-unsafe extern "C" {
-    fn ldiv(__numer: ::std::os::raw::c_long, __denom: ::std::os::raw::c_long) -> ldiv_t;
-}
-unsafe extern "C" {
-    fn lldiv(__numer: ::std::os::raw::c_longlong, __denom: ::std::os::raw::c_longlong) -> lldiv_t;
-}
-unsafe extern "C" {
-    fn ecvt(
-        __value: f64,
-        __ndigit: ::std::os::raw::c_int,
-        __decpt: *mut ::std::os::raw::c_int,
-        __sign: *mut ::std::os::raw::c_int,
-    ) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn fcvt(
-        __value: f64,
-        __ndigit: ::std::os::raw::c_int,
-        __decpt: *mut ::std::os::raw::c_int,
-        __sign: *mut ::std::os::raw::c_int,
-    ) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn gcvt(
-        __value: f64,
-        __ndigit: ::std::os::raw::c_int,
-        __buf: *mut ::std::os::raw::c_char,
-    ) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn qecvt(
-        __value: u128,
-        __ndigit: ::std::os::raw::c_int,
-        __decpt: *mut ::std::os::raw::c_int,
-        __sign: *mut ::std::os::raw::c_int,
-    ) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn qfcvt(
-        __value: u128,
-        __ndigit: ::std::os::raw::c_int,
-        __decpt: *mut ::std::os::raw::c_int,
-        __sign: *mut ::std::os::raw::c_int,
-    ) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn qgcvt(
-        __value: u128,
-        __ndigit: ::std::os::raw::c_int,
-        __buf: *mut ::std::os::raw::c_char,
-    ) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn ecvt_r(
-        __value: f64,
-        __ndigit: ::std::os::raw::c_int,
-        __decpt: *mut ::std::os::raw::c_int,
-        __sign: *mut ::std::os::raw::c_int,
-        __buf: *mut ::std::os::raw::c_char,
-        __len: usize,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fcvt_r(
-        __value: f64,
-        __ndigit: ::std::os::raw::c_int,
-        __decpt: *mut ::std::os::raw::c_int,
-        __sign: *mut ::std::os::raw::c_int,
-        __buf: *mut ::std::os::raw::c_char,
-        __len: usize,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn qecvt_r(
-        __value: u128,
-        __ndigit: ::std::os::raw::c_int,
-        __decpt: *mut ::std::os::raw::c_int,
-        __sign: *mut ::std::os::raw::c_int,
-        __buf: *mut ::std::os::raw::c_char,
-        __len: usize,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn qfcvt_r(
-        __value: u128,
-        __ndigit: ::std::os::raw::c_int,
-        __decpt: *mut ::std::os::raw::c_int,
-        __sign: *mut ::std::os::raw::c_int,
-        __buf: *mut ::std::os::raw::c_char,
-        __len: usize,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn mblen(__s: *const ::std::os::raw::c_char, __n: usize) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn mbtowc(
-        __pwc: *mut wchar_t,
-        __s: *const ::std::os::raw::c_char,
-        __n: usize,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn wctomb(__s: *mut ::std::os::raw::c_char, __wchar: wchar_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn mbstowcs(__pwcs: *mut wchar_t, __s: *const ::std::os::raw::c_char, __n: usize) -> usize;
-}
-unsafe extern "C" {
-    fn wcstombs(__s: *mut ::std::os::raw::c_char, __pwcs: *const wchar_t, __n: usize) -> usize;
-}
-unsafe extern "C" {
-    fn rpmatch(__response: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn getsubopt(
-        __optionp: *mut *mut ::std::os::raw::c_char,
-        __tokens: *const *mut ::std::os::raw::c_char,
-        __valuep: *mut *mut ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn getloadavg(__loadavg: *mut f64, __nelem: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-type useconds_t = __useconds_t;
-type socklen_t = __socklen_t;
-unsafe extern "C" {
-    fn access(
-        __name: *const ::std::os::raw::c_char,
-        __type: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn faccessat(
-        __fd: ::std::os::raw::c_int,
-        __file: *const ::std::os::raw::c_char,
-        __type: ::std::os::raw::c_int,
-        __flag: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn lseek(
-        __fd: ::std::os::raw::c_int,
-        __offset: __off_t,
-        __whence: ::std::os::raw::c_int,
-    ) -> __off_t;
-}
-unsafe extern "C" {
-    fn close(__fd: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn closefrom(__lowfd: ::std::os::raw::c_int);
-}
-unsafe extern "C" {
-    fn read(
-        __fd: ::std::os::raw::c_int,
-        __buf: *mut ::std::os::raw::c_void,
-        __nbytes: usize,
-    ) -> isize;
-}
-unsafe extern "C" {
-    fn write(
-        __fd: ::std::os::raw::c_int,
-        __buf: *const ::std::os::raw::c_void,
-        __n: usize,
-    ) -> isize;
-}
-unsafe extern "C" {
-    fn pread(
-        __fd: ::std::os::raw::c_int,
-        __buf: *mut ::std::os::raw::c_void,
-        __nbytes: usize,
-        __offset: __off_t,
-    ) -> isize;
-}
-unsafe extern "C" {
-    fn pwrite(
-        __fd: ::std::os::raw::c_int,
-        __buf: *const ::std::os::raw::c_void,
-        __n: usize,
-        __offset: __off_t,
-    ) -> isize;
-}
-unsafe extern "C" {
-    fn pipe(__pipedes: *mut ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn alarm(__seconds: ::std::os::raw::c_uint) -> ::std::os::raw::c_uint;
-}
-unsafe extern "C" {
-    fn sleep(__seconds: ::std::os::raw::c_uint) -> ::std::os::raw::c_uint;
-}
-unsafe extern "C" {
-    fn ualarm(__value: __useconds_t, __interval: __useconds_t) -> __useconds_t;
-}
-unsafe extern "C" {
-    fn usleep(__useconds: __useconds_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn pause() -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn chown(
-        __file: *const ::std::os::raw::c_char,
-        __owner: __uid_t,
-        __group: __gid_t,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fchown(
-        __fd: ::std::os::raw::c_int,
-        __owner: __uid_t,
-        __group: __gid_t,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn lchown(
-        __file: *const ::std::os::raw::c_char,
-        __owner: __uid_t,
-        __group: __gid_t,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fchownat(
-        __fd: ::std::os::raw::c_int,
-        __file: *const ::std::os::raw::c_char,
-        __owner: __uid_t,
-        __group: __gid_t,
-        __flag: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn chdir(__path: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fchdir(__fd: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn getcwd(__buf: *mut ::std::os::raw::c_char, __size: usize) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn getwd(__buf: *mut ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn dup(__fd: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn dup2(__fd: ::std::os::raw::c_int, __fd2: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    static mut __environ: *mut *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn execve(
-        __path: *const ::std::os::raw::c_char,
-        __argv: *const *mut ::std::os::raw::c_char,
-        __envp: *const *mut ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fexecve(
-        __fd: ::std::os::raw::c_int,
-        __argv: *const *mut ::std::os::raw::c_char,
-        __envp: *const *mut ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn execv(
-        __path: *const ::std::os::raw::c_char,
-        __argv: *const *mut ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn execle(
-        __path: *const ::std::os::raw::c_char,
-        __arg: *const ::std::os::raw::c_char,
-        ...
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn execl(
-        __path: *const ::std::os::raw::c_char,
-        __arg: *const ::std::os::raw::c_char,
-        ...
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn execvp(
-        __file: *const ::std::os::raw::c_char,
-        __argv: *const *mut ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn execlp(
-        __file: *const ::std::os::raw::c_char,
-        __arg: *const ::std::os::raw::c_char,
-        ...
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn nice(__inc: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
 unsafe extern "C" {
     fn _exit(__status: ::std::os::raw::c_int) -> !;
 }
@@ -2950,300 +1404,7 @@ const _CS_V6_ENV: _bindgen_ty_3 = 1148;
 const _CS_V7_ENV: _bindgen_ty_3 = 1149;
 type _bindgen_ty_3 = ::std::os::raw::c_uint;
 unsafe extern "C" {
-    fn pathconf(
-        __path: *const ::std::os::raw::c_char,
-        __name: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    fn fpathconf(
-        __fd: ::std::os::raw::c_int,
-        __name: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    fn sysconf(__name: ::std::os::raw::c_int) -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    fn confstr(
-        __name: ::std::os::raw::c_int,
-        __buf: *mut ::std::os::raw::c_char,
-        __len: usize,
-    ) -> usize;
-}
-unsafe extern "C" {
-    fn getpid() -> __pid_t;
-}
-unsafe extern "C" {
-    fn getppid() -> __pid_t;
-}
-unsafe extern "C" {
-    fn getpgrp() -> __pid_t;
-}
-unsafe extern "C" {
     fn __getpgid(__pid: __pid_t) -> __pid_t;
-}
-unsafe extern "C" {
-    fn getpgid(__pid: __pid_t) -> __pid_t;
-}
-unsafe extern "C" {
-    fn setpgid(__pid: __pid_t, __pgid: __pid_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn setpgrp() -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn setsid() -> __pid_t;
-}
-unsafe extern "C" {
-    fn getsid(__pid: __pid_t) -> __pid_t;
-}
-unsafe extern "C" {
-    fn getuid() -> __uid_t;
-}
-unsafe extern "C" {
-    fn geteuid() -> __uid_t;
-}
-unsafe extern "C" {
-    fn getgid() -> __gid_t;
-}
-unsafe extern "C" {
-    fn getegid() -> __gid_t;
-}
-unsafe extern "C" {
-    fn getgroups(__size: ::std::os::raw::c_int, __list: *mut __gid_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn setuid(__uid: __uid_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn setreuid(__ruid: __uid_t, __euid: __uid_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn seteuid(__uid: __uid_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn setgid(__gid: __gid_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn setregid(__rgid: __gid_t, __egid: __gid_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn setegid(__gid: __gid_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fork() -> __pid_t;
-}
-unsafe extern "C" {
-    fn vfork() -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn ttyname(__fd: ::std::os::raw::c_int) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn ttyname_r(
-        __fd: ::std::os::raw::c_int,
-        __buf: *mut ::std::os::raw::c_char,
-        __buflen: usize,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn isatty(__fd: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn ttyslot() -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn link(
-        __from: *const ::std::os::raw::c_char,
-        __to: *const ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn linkat(
-        __fromfd: ::std::os::raw::c_int,
-        __from: *const ::std::os::raw::c_char,
-        __tofd: ::std::os::raw::c_int,
-        __to: *const ::std::os::raw::c_char,
-        __flags: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn symlink(
-        __from: *const ::std::os::raw::c_char,
-        __to: *const ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn readlink(
-        __path: *const ::std::os::raw::c_char,
-        __buf: *mut ::std::os::raw::c_char,
-        __len: usize,
-    ) -> isize;
-}
-unsafe extern "C" {
-    fn symlinkat(
-        __from: *const ::std::os::raw::c_char,
-        __tofd: ::std::os::raw::c_int,
-        __to: *const ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn readlinkat(
-        __fd: ::std::os::raw::c_int,
-        __path: *const ::std::os::raw::c_char,
-        __buf: *mut ::std::os::raw::c_char,
-        __len: usize,
-    ) -> isize;
-}
-unsafe extern "C" {
-    fn unlink(__name: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn unlinkat(
-        __fd: ::std::os::raw::c_int,
-        __name: *const ::std::os::raw::c_char,
-        __flag: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn rmdir(__path: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn tcgetpgrp(__fd: ::std::os::raw::c_int) -> __pid_t;
-}
-unsafe extern "C" {
-    fn tcsetpgrp(__fd: ::std::os::raw::c_int, __pgrp_id: __pid_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn getlogin() -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn getlogin_r(__name: *mut ::std::os::raw::c_char, __name_len: usize) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn setlogin(__name: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    static mut optarg: *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    static mut optind: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    static mut opterr: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    static mut optopt: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn getopt(
-        ___argc: ::std::os::raw::c_int,
-        ___argv: *const *mut ::std::os::raw::c_char,
-        __shortopts: *const ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn gethostname(__name: *mut ::std::os::raw::c_char, __len: usize) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn sethostname(__name: *const ::std::os::raw::c_char, __len: usize) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn sethostid(__id: ::std::os::raw::c_long) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn getdomainname(__name: *mut ::std::os::raw::c_char, __len: usize) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn setdomainname(__name: *const ::std::os::raw::c_char, __len: usize) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn vhangup() -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn revoke(__file: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn profil(
-        __sample_buffer: *mut ::std::os::raw::c_ushort,
-        __size: usize,
-        __offset: usize,
-        __scale: ::std::os::raw::c_uint,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn acct(__name: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn getusershell() -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn endusershell();
-}
-unsafe extern "C" {
-    fn setusershell();
-}
-unsafe extern "C" {
-    fn daemon(
-        __nochdir: ::std::os::raw::c_int,
-        __noclose: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn chroot(__path: *const ::std::os::raw::c_char) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn getpass(__prompt: *const ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn fsync(__fd: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn gethostid() -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    fn sync();
-}
-unsafe extern "C" {
-    fn getpagesize() -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn getdtablesize() -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn truncate(__file: *const ::std::os::raw::c_char, __length: __off_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn ftruncate(__fd: ::std::os::raw::c_int, __length: __off_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn brk(__addr: *mut ::std::os::raw::c_void) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn sbrk(__delta: isize) -> *mut ::std::os::raw::c_void;
-}
-unsafe extern "C" {
-    fn syscall(__sysno: ::std::os::raw::c_long, ...) -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    fn lockf(
-        __fd: ::std::os::raw::c_int,
-        __cmd: ::std::os::raw::c_int,
-        __len: __off_t,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn fdatasync(__fildes: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn crypt(
-        __key: *const ::std::os::raw::c_char,
-        __salt: *const ::std::os::raw::c_char,
-    ) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn getentropy(__buffer: *mut ::std::os::raw::c_void, __length: usize) -> ::std::os::raw::c_int;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -3293,11 +1454,6 @@ const _: () = {
 };
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-struct sigevent {
-    _unused: [u8; 0],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
 struct __locale_struct {
     __locales: [*mut __locale_data; 13usize],
     __ctype_b: *const ::std::os::raw::c_ushort,
@@ -3321,66 +1477,6 @@ const _: () = {
         [::std::mem::offset_of!(__locale_struct, __names) - 128usize];
 };
 type __locale_t = *mut __locale_struct;
-type locale_t = __locale_t;
-unsafe extern "C" {
-    fn clock() -> clock_t;
-}
-unsafe extern "C" {
-    fn time(__timer: *mut time_t) -> time_t;
-}
-unsafe extern "C" {
-    fn difftime(__time1: time_t, __time0: time_t) -> f64;
-}
-unsafe extern "C" {
-    fn mktime(__tp: *mut tm) -> time_t;
-}
-unsafe extern "C" {
-    fn strftime(
-        __s: *mut ::std::os::raw::c_char,
-        __maxsize: usize,
-        __format: *const ::std::os::raw::c_char,
-        __tp: *const tm,
-    ) -> usize;
-}
-unsafe extern "C" {
-    fn strftime_l(
-        __s: *mut ::std::os::raw::c_char,
-        __maxsize: usize,
-        __format: *const ::std::os::raw::c_char,
-        __tp: *const tm,
-        __loc: locale_t,
-    ) -> usize;
-}
-unsafe extern "C" {
-    fn gmtime(__timer: *const time_t) -> *mut tm;
-}
-unsafe extern "C" {
-    fn localtime(__timer: *const time_t) -> *mut tm;
-}
-unsafe extern "C" {
-    fn gmtime_r(__timer: *const time_t, __tp: *mut tm) -> *mut tm;
-}
-unsafe extern "C" {
-    fn localtime_r(__timer: *const time_t, __tp: *mut tm) -> *mut tm;
-}
-unsafe extern "C" {
-    fn asctime(__tp: *const tm) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn ctime(__timer: *const time_t) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn asctime_r(
-        __tp: *const tm,
-        __buf: *mut ::std::os::raw::c_char,
-    ) -> *mut ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn ctime_r(
-        __timer: *const time_t,
-        __buf: *mut ::std::os::raw::c_char,
-    ) -> *mut ::std::os::raw::c_char;
-}
 unsafe extern "C" {
     static mut __tzname: [*mut ::std::os::raw::c_char; 2usize];
 }
@@ -3391,81 +1487,9 @@ unsafe extern "C" {
     static mut __timezone: ::std::os::raw::c_long;
 }
 unsafe extern "C" {
-    static mut tzname: [*mut ::std::os::raw::c_char; 2usize];
-}
-unsafe extern "C" {
-    fn tzset();
-}
-unsafe extern "C" {
-    static mut daylight: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    static mut timezone: ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    fn timegm(__tp: *mut tm) -> time_t;
-}
-unsafe extern "C" {
-    fn timelocal(__tp: *mut tm) -> time_t;
-}
-unsafe extern "C" {
-    fn dysize(__year: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn nanosleep(
-        __requested_time: *const timespec,
-        __remaining: *mut timespec,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn clock_getres(__clock_id: clockid_t, __res: *mut timespec) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
     pub fn clock_gettime(__clock_id: clockid_t, __tp: *mut timespec) -> ::std::os::raw::c_int;
 }
-unsafe extern "C" {
-    fn clock_settime(__clock_id: clockid_t, __tp: *const timespec) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn clock_nanosleep(
-        __clock_id: clockid_t,
-        __flags: ::std::os::raw::c_int,
-        __req: *const timespec,
-        __rem: *mut timespec,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn clock_getcpuclockid(__pid: pid_t, __clock_id: *mut clockid_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn timer_create(
-        __clock_id: clockid_t,
-        __evp: *mut sigevent,
-        __timerid: *mut timer_t,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn timer_delete(__timerid: timer_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn timer_settime(
-        __timerid: timer_t,
-        __flags: ::std::os::raw::c_int,
-        __value: *const itimerspec,
-        __ovalue: *mut itimerspec,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn timer_gettime(__timerid: timer_t, __value: *mut itimerspec) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn timer_getoverrun(__timerid: timer_t) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn timespec_get(__ts: *mut timespec, __base: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
-}
 type cudaIpcMemHandle_t = [::std::os::raw::c_char; 64usize];
-type errno_t = ::std::os::raw::c_int;
 #[doc = " @brief  Keyword\n The IMAGE_KEYWORD structure includes :\n \t- name\n \t- type\n \t- value"]
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -3857,8 +1881,6 @@ pub union IMAGE__bindgen_ty_1 {
     pub SI64: *mut i64,
     pub F: *mut f32,
     pub D: *mut f64,
-    pub CF: *mut complex_float,
-    pub CD: *mut complex_double,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
@@ -3886,10 +1908,6 @@ const _: () = {
         [::std::mem::offset_of!(IMAGE__bindgen_ty_1, F) - 0usize];
     ["Offset of field: IMAGE__bindgen_ty_1::D"]
         [::std::mem::offset_of!(IMAGE__bindgen_ty_1, D) - 0usize];
-    ["Offset of field: IMAGE__bindgen_ty_1::CF"]
-        [::std::mem::offset_of!(IMAGE__bindgen_ty_1, CF) - 0usize];
-    ["Offset of field: IMAGE__bindgen_ty_1::CD"]
-        [::std::mem::offset_of!(IMAGE__bindgen_ty_1, CD) - 0usize];
 };
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
@@ -3920,215 +1938,6 @@ const _: () = {
     ["Offset of field: IMAGE::CircBuff_md"][::std::mem::offset_of!(IMAGE, CircBuff_md) - 232usize];
     ["Offset of field: IMAGE::CBimdata"][::std::mem::offset_of!(IMAGE, CBimdata) - 240usize];
 };
-unsafe extern "C" {
-    fn libinit_ImageStreamIO();
-}
-unsafe extern "C" {
-    fn init_ImageStreamIO() -> errno_t;
-}
-unsafe extern "C" {
-    #[doc = " @brief Set the error reporting function to the default provided by the library.\n\n \\returns IMAGESTREAMIO_SUCCESS on success\n \\returns IMAGESTREAMIO_FAILURE on an error"]
-    fn ImageStreamIO_set_default_printError() -> errno_t;
-}
-unsafe extern "C" {
-    #[doc = " @brief Set the error reporting function.\n The new function supplied by the pointer will be called whenever a library function reports an error.\n Pass `NULL` to turn off error reporting from within the library.\n\n \\param new_printError is a pointer to the function to use for reporting errors. Can be NULL.\n\n \\returns IMAGESTREAMIO_SUCCESS on success\n \\returns IMAGESTREAMIO_FAILURE on an error"]
-    fn ImageStreamIO_set_printError(
-        new_printError: ::std::option::Option<
-            unsafe extern "C" fn(
-                arg1: *const ::std::os::raw::c_char,
-                arg2: *const ::std::os::raw::c_char,
-                arg3: ::std::os::raw::c_int,
-                arg4: errno_t,
-                arg5: *mut ::std::os::raw::c_char,
-            ) -> errno_t,
-        >,
-    ) -> errno_t;
-}
-unsafe extern "C" {
-    #[doc = " @brief Get the raw pointer to the beginning of the slice slice_index.\n\n\n ## Purpose\n\n Return the raw pointer to the beginning of the slice slice_index\n\n ## Arguments\n\n @param[in]\n image\tIMAGE*\n \t\t\tpointer to shmim\n\n @param[in]\n indec\tconst int\n \t\t\tslice_index of the slice to read\n\n @param[out]\n buffer\tvoid**\n \t\t\tpointer to the beginning of the slice\n\n \\return the error code"]
-    fn ImageStreamIO_readBufferAt(
-        image: *const IMAGE,
-        slice_index: ::std::os::raw::c_uint,
-        buffer: *mut *mut ::std::os::raw::c_void,
-    ) -> errno_t;
-}
-unsafe extern "C" {
-    #[doc = " @brief Get the standard stream filename.\n\n Fills in the \\p file_name string with the standard shared memory image path, e.g.\n  \\code\n    char file_name[64];\n    ImageStreamIO_filename(file_name, 64, \"image00\");\n    printf(\"%s\\n\", file_name);\n  \\endcode\n produces the output:\n  \\verbatim\n    /milk/shm/image00.im.shm\n8  \\endverbatim\n\n \\returns IMAGESTREAMIO_SUCCESS on success\n \\returns IMAGESTREAMIO_FAILURE on error"]
-    fn ImageStreamIO_filename(
-        file_name: *mut ::std::os::raw::c_char,
-        ssz: usize,
-        im_name: *const ::std::os::raw::c_char,
-    ) -> errno_t;
-}
-unsafe extern "C" {
-    #[doc = " @brief Get the size in bytes from the data type code.\n\n \\returns the size in bytes of the data type if valid\n \\returns -1 if atype is not valid"]
-    fn ImageStreamIO_typesize(atype: u8) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn ImageStreamIO_typename(datatype: u8) -> *const ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn ImageStreamIO_typename_short(datatype: u8) -> *const ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn ImageStreamIO_typename_7(datatype: u8) -> *const ::std::os::raw::c_char;
-}
-unsafe extern "C" {
-    fn ImageStreamIO_checktype(
-        datatype: u8,
-        complex_allowed: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    #[doc = " @brief Get the appropriate floating point type for arithmetic from any type\n\n \\returns the atype of the matching float type\n \\returns -1 if atype is not valid"]
-    fn ImageStreamIO_floattype(datatype: u8) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    #[doc = " @brief Get the FITSIO BITPIX from the data type code.\n\n \\returns the BITPIX if atype valid\n \\returns -1 if atype is not valid"]
-    fn ImageStreamIO_FITSIObitpix(atype: u8) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn ImageStreamIO_FITSIOdatatype(datatype: u8) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn ImageStreamIO_check_image_inode(image: *mut IMAGE) -> errno_t;
-}
-unsafe extern "C" {
-    fn ImageStreamIO_check_image_endpoint_inode(image: *mut IMAGE) -> errno_t;
-}
-unsafe extern "C" {
-    fn ImageStreamIO_autorelink_if_need_if_can(image: *mut IMAGE) -> errno_t;
-}
-unsafe extern "C" {
-    fn ImageStreamIO_new_image_compatible(
-        source_image: *mut IMAGE,
-        new_image: *mut IMAGE,
-    ) -> errno_t;
-}
-unsafe extern "C" {
-    #[doc = " @brief Create shared memory image stream (legacy API)"]
-    fn ImageStreamIO_createIm(
-        image: *mut IMAGE,
-        name: *const ::std::os::raw::c_char,
-        naxis: ::std::os::raw::c_long,
-        size: *mut u32,
-        atype: u8,
-        shared: ::std::os::raw::c_int,
-        NBkw: ::std::os::raw::c_int,
-        CBsize: ::std::os::raw::c_int,
-    ) -> errno_t;
-}
-unsafe extern "C" {
-    #[doc = " @brief Create shared memory image stream"]
-    fn ImageStreamIO_createIm_gpu(
-        image: *mut IMAGE,
-        name: *const ::std::os::raw::c_char,
-        naxis: ::std::os::raw::c_long,
-        size: *mut u32,
-        atype: u8,
-        location: i8,
-        shared: ::std::os::raw::c_int,
-        NBsem: ::std::os::raw::c_int,
-        NBkw: ::std::os::raw::c_int,
-        imagetype: u64,
-        CBsize: u32,
-    ) -> errno_t;
-}
-unsafe extern "C" {
-    #[doc = " @brief Deallocate and remove an IMAGE structure.\n\n For a shared image:\n Closes all semaphores, deallcoates sem pointers,\n and removes associated files. Unmaps the shared memory\n segment, and finally removes the file. Sets the metadata and\n keyword pointers to NULL.\n\n For a non-shred image:\n Deallocates all arrays and sets pointers to NULL.\n\n \\returns IMAGESTREAMIO_SUCCESS on success\n \\returns IMAGESTREAMIO_FAILURE on an error (but currently no checks done)\n"]
-    fn ImageStreamIO_destroyIm(image: *mut IMAGE) -> errno_t;
-}
-unsafe extern "C" {
-    #[doc = " @brief Connect to an existing shared memory image stream\n\n Wrapper for  \\ref ImageStreamIO_read_sharedmem_image_toIMAGE"]
-    fn ImageStreamIO_openIm(image: *mut IMAGE, name: *const ::std::os::raw::c_char) -> errno_t;
-}
-unsafe extern "C" {
-    fn ImageStreamIO_get_image_d_ptr(image: *mut IMAGE) -> *mut ::std::os::raw::c_void;
-}
-unsafe extern "C" {
-    #[doc = " @brief Read / connect to existing shared memory image stream"]
-    fn ImageStreamIO_read_sharedmem_image_toIMAGE(
-        name: *const ::std::os::raw::c_char,
-        image: *mut IMAGE,
-    ) -> errno_t;
-}
-unsafe extern "C" {
-    #[doc = " @brief Close a shared memmory image stream.\n\n For use in clients, detaches and cleans up memory used by non-owner process.\n\n \\returns IMAGESTREAMIO_SUCCESS on success\n \\returns the appropriate error code otherwise if an error occurs\n"]
-    fn ImageStreamIO_closeIm(image: *mut IMAGE) -> errno_t;
-}
-unsafe extern "C" {
-    #[doc = " @brief Post all shmim semaphores\n\n ## Purpose\n\n Posts semaphore of a shmim\n if index < 0, post all semaphores\n\n ## Arguments\n\n @param[in]\n image\tIMAGE*\n \t\t\tpointer to shmim\n\n @param[in]\n index    semaphore index\n \t\t\tindex of semaphore to be posted\n          if index=-1, post all semaphores"]
-    fn ImageStreamIO_sempost(
-        image: *mut IMAGE,
-        index: ::std::os::raw::c_long,
-    ) -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    #[doc = " @brief Post all shmim semaphores except one\n\n ## Purpose\n\n Posts all semaphores of a shmim except one\n\n ## Arguments\n\n @param[in]\n image\tIMAGE*\n \t\t\tpointer to shmim\n\n @param[in]\n index    semaphore index\n \t\t\tindex of semaphore to be excluded"]
-    fn ImageStreamIO_sempost_excl(
-        image: *mut IMAGE,
-        index: ::std::os::raw::c_long,
-    ) -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    #[doc = " @brief Post shmim semaphores at regular time interval\n\n ## Purpose\n\n Posts all semaphores of a shmim at regular time intervals\n\n ## Arguments\n\n @param[in]\n image\tIMAGE*\n \t\t\tpointer to shmim\n\n @param[in]\n index    semaphore index\n \t\t\tis =-1, post all semaphores\n\n @param[in]\n dtus     time interval [us]\n"]
-    fn ImageStreamIO_sempost_loop(
-        image: *mut IMAGE,
-        index: ::std::os::raw::c_long,
-        dtus: ::std::os::raw::c_long,
-    ) -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    #[doc = " @brief Get available semaphore index\n\n\n"]
-    fn ImageStreamIO_getsemwaitindex(
-        image: *mut IMAGE,
-        semindexdefault: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    #[doc = " @brief Wait for semaphore\n\n ## Purpose\n\n Wait on a shmim semaphore\n\n ## Arguments\n\n @param[in]\n image\tIMAGE*\n \t\t\tpointer to shmim\n\n @param[in]\n index    semaphore index\n"]
-    fn ImageStreamIO_semwait(
-        image: *mut IMAGE,
-        index: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn ImageStreamIO_semtrywait(
-        image: *mut IMAGE,
-        index: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    fn ImageStreamIO_semtimedwait(
-        image: *mut IMAGE,
-        index: ::std::os::raw::c_int,
-        semwts: *const timespec,
-    ) -> ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    #[doc = " @brief Flush all semaphores of a shmim\n\n ## Purpose\n\n Flush shmim semaphore\n\n ## Arguments\n\n @param[in]\n image\tIMAGE*\n \t\t\tpointer to shmim\n\n @param[in]\n index    semaphore index\n \t\t\tflush all semaphores if index<0\n"]
-    fn ImageStreamIO_semflush(
-        image: *mut IMAGE,
-        index: ::std::os::raw::c_long,
-    ) -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    fn ImageStreamIO_semvalue(
-        image: *mut IMAGE,
-        index: ::std::os::raw::c_long,
-    ) -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    #[doc = " @brief Update image metadata and post semaphores after image is updated\n\n Increments counters, sets times, sets write flag to zero, and posts semaphores.\n Should be called each time image content is updated\n"]
-    fn ImageStreamIO_UpdateIm_atime(
-        image: *mut IMAGE,
-        atime: *mut timespec,
-    ) -> ::std::os::raw::c_long;
-}
-unsafe extern "C" {
-    #[doc = " @brief Update image metadata and post semaphores after image is updated\n\n Increments counters, sets times, sets write flag to zero, and posts semaphores.\n Should be called each time image content is updated\n\n Acquisition time (atime) will be set to the write time.\n"]
-    fn ImageStreamIO_UpdateIm(image: *mut IMAGE) -> ::std::os::raw::c_long;
-}
 type __builtin_va_list = [__va_list_tag; 1usize];
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

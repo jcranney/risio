@@ -18,7 +18,6 @@ libc = "0.2.186"
 memmap2 = "0.9.11"
 pyo3 = "0.29.0"
 rkyv = "0.8.16"
-sem_safe = { version = "0.2.1", default-features = false, features = ["named"] }
 thiserror = "2.0.18"
 
 [lib]

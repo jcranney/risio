@@ -18,11 +18,10 @@
       {
         defaultPackage = naersk-lib.buildPackage {
           src = ./.;
-          buildInputs = with pkgs; [ cmake pkg-config ];
+          buildInputs = with pkgs; [ cmake pkg-config maturin python314 ];
           gitSubmodules = true;
           gitAllRefs = true;
           preBuild = ''
-            echo FIND ME HERE
             ls
             find \
                   -name CMakeCache.txt \

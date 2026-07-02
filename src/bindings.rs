@@ -368,7 +368,7 @@ const _: () = {
     ["Offset of field: __sigset_t::__val"][::std::mem::offset_of!(__sigset_t, __val) - 0usize];
 };
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct timeval {
     pub tv_sec: __time_t,
     pub tv_usec: __suseconds_t,
@@ -381,7 +381,7 @@ const _: () = {
     ["Offset of field: timeval::tv_usec"][::std::mem::offset_of!(timeval, tv_usec) - 8usize];
 };
 #[repr(C)]
-#[derive(Debug, Copy, Clone, Archive, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Archive, Deserialize, Serialize, PartialEq)]
 pub struct timespec {
     pub tv_sec: __time_t,
     pub tv_nsec: __syscall_slong_t,
@@ -419,7 +419,6 @@ const _: () = {
     ["Alignment of fd_set"][::std::mem::align_of::<fd_set>() - 8usize];
     ["Offset of field: fd_set::__fds_bits"][::std::mem::offset_of!(fd_set, __fds_bits) - 0usize];
 };
-pub type fd_mask = __fd_mask;
 #[repr(C)]
 #[derive(Copy, Clone)]
 union __atomic_wide_counter {
@@ -1413,7 +1412,7 @@ unsafe extern "C" {
     fn __getpgid(__pid: __pid_t) -> __pid_t;
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 struct tm {
     tm_sec: ::std::os::raw::c_int,
     tm_min: ::std::os::raw::c_int,
@@ -1444,7 +1443,7 @@ const _: () = {
     ["Offset of field: tm::tm_zone"][::std::mem::offset_of!(tm, tm_zone) - 48usize];
 };
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 struct itimerspec {
     it_interval: timespec,
     it_value: timespec,
@@ -1561,9 +1560,10 @@ const _: () = {
     ["Offset of field: IMAGE_KEYWORD::comment"]
         [::std::mem::offset_of!(IMAGE_KEYWORD, comment) - 48usize];
 };
+#[allow(clippy::upper_case_acronyms)]
 #[doc = " @brief structure holding two 8-byte integers\n\n Used in an union with struct timespec to ensure fixed 16 byte length"]
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 struct TIMESPECFIXED {
     firstlong: i64,
     secondlong: i64,
@@ -1603,9 +1603,12 @@ const _: () = {
     ["Offset of field: complex_double::re"][::std::mem::offset_of!(complex_double, re) - 0usize];
     ["Offset of field: complex_double::im"][::std::mem::offset_of!(complex_double, im) - 8usize];
 };
-#[doc = " @brief Image metadata\n\n\n"]
+
+///
+/// Image metadata
+/// 
 #[repr(C)]
-#[derive(Debug, Copy, Clone, Archive, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Archive, Deserialize, Serialize, PartialEq)]
 pub struct IMAGE_METADATA {
     pub version: [::std::os::raw::c_char; 32usize],
     #[doc = " @brief Image Name"]
@@ -1729,7 +1732,7 @@ const _: () = {
 };
 #[doc = " @brief STREAM_PROC_TRACE holds trigger and timing info\n\n Array of STREAM_PROC_TRACE is held within streams to track history.\n This information is assembled by a process, and then written to\n all streams it writes.\n"]
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct STREAM_PROC_TRACE {
     triggermode: ::std::os::raw::c_int,
     #[doc = "< PID of process writing stream. 0 if no entry"]
@@ -1791,7 +1794,7 @@ const _: () = {
 };
 #[doc = " @brief CBFRAMEMD fast access circular buffer metadata"]
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct CBFRAMEMD {
     cnt0: u64,
     cnt1: u64,
@@ -1825,8 +1828,9 @@ const _: () = {
     ["Offset of field: CBFRAMEMD::writetime"]
         [::std::mem::offset_of!(CBFRAMEMD, writetime) - 32usize];
 };
+#[allow(clippy::upper_case_acronyms)]
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 struct FRAMEWRITEMD {
     cnt0: u64,
     wpid: pid_t,
@@ -1853,41 +1857,94 @@ const _: () = {
     ["Offset of field: SEMFILEDATA::semdata"]
         [::std::mem::offset_of!(SEMFILEDATA, semdata) - 0usize];
 };
-#[doc = " @brief IMAGE structure\n The IMAGE structure includes :\n   - an array of IMAGE_KEWORD structures\n   - an array of IMAGE_METADATA structures (usually only 1 element)\n\n IMPORTANT: memory allocations for dynamically allocated arrays need to be\n included in the memory size computation in ImageStreamIO_createIm_gpu\n"]
+
+/// This is the one-to-one mapping of the C "IMAGE" struct defined in ImageStruct.h.
+/// It was generated using bindgen, so I trust that it's correct. Eventually, this
+/// will not be needed in the RUST API, since this object is mostly responsible for
+/// storing relevant runtime data, and those can be defined in rust. However, there
+/// is an argument for keeping this definition, since it would allow calling external
+/// C code from rust that interfaces with an "IMAGE" type, or providing rust-written
+/// functions for external C packages to interface with.
+/// 
+/// Another option would be to define a trait that composes the C object, and then
+/// implement that trait on the rust objects.
+///
+/// Note that the struct parameter comments/documentation also comes from the C
+/// library, so the implied implementation may be slightly different in rust.
+///  
+/// ## From the C library:
+/// The IMAGE structure includes:
+/// - an array of IMAGE_KEWORD structures
+/// - an array of IMAGE_METADATA structures (usually only 1 element)
+///
+/// IMPORTANT: memory allocations for dynamically allocated arrays need to be
+/// included in the memory size computation in ImageStreamIO_createIm_gpu
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive()]
 pub struct IMAGE {
-    #[doc = "< local name (can be different from name in shared memory)"]
+    /// local name (can be different from name in shared memory)
     pub name: [::std::os::raw::c_char; 80usize],
-    #[doc = " @brief Image usage flag\n\n 1 if image is used, 0 otherwise. \\n\n This flag is used when an array of IMAGE type is held in memory as a way to store multiple images. \\n\n When an image is freed, the corresponding memory (in array) is freed and this flag set to zero. \\n\n The active images can be listed by looking for IMAGE[i].used==1 entries.\\n\n"]
+    /// Image usage flag
+    ///  - 1 if image is used
+    ///  - 0 otherwise.
+    /// This flag is used when an array of IMAGE type is held in memory
+    /// as a way to store multiple images.
+    /// 
+    /// When an image is freed, the corresponding memory (in array) is freed
+    /// and this flag set to zero.
+    /// 
+    /// The active images can be listed by looking for IMAGE[i].used==1 entries.
     pub used: u8,
-    #[doc = "< increments when image is (re)-created"]
+    /// increments when image is (re)-created
     pub createcnt: i64,
-    #[doc = "< if shared memory, file descriptor"]
+    /// if shared memory, file descriptor
     pub shmfd: i32,
-    #[doc = "< total size in memory if shared"]
+    /// total size in memory if shared
     pub memsize: u64,
-    #[doc = "< pointer to semaphore for logging  (8 bytes on 64-bit system)"]
+    /// pointer to semaphore for logging  (8 bytes on 64-bit system)
     pub semlog: *mut sem_t,
+    /// pointer to image metadata
     pub md: *mut IMAGE_METADATA,
-    #[doc = "< pointer to data array"]
+    /// pointer to data array
     pub array: IMAGE__bindgen_ty_1,
-    #[doc = "< array of pointers to semaphores   (each 8 bytes on 64-bit system)"]
+    /// array of pointers to semaphores   (each 8 bytes on 64-bit system)
     pub semptr: *mut *mut sem_t,
+    /// array of image Keywords
     pub kw: *mut IMAGE_KEYWORD,
+    /// array of semfiles
     pub semfile: *mut SEMFILEDATA,
+    /// PID of process that read shared memory stream
+    /// Initialized at 0. Otherwise, when process is waiting on semaphore, its PID is written in this array
+    /// The array can be used to look for available semaphores
     pub semReadPID: *mut pid_t,
+    /// PID of processes that are posting the semaphores (JC: I guess there should only be one?)
     pub semWritePID: *mut pid_t,
+    /// semaphore control, written by writer to control semaphore behavior.
+    /// See SEMAPHORE_CONTROL_XXX defines for details
     pub semctrl: *mut u32,
+    /// semaphore status, written by readers to report back to stream what is their current status.
+    /// See SEMAPHORE_STATUS_XXX defines for details
     pub semstatus: *mut u32,
+    // array to keep track of stream history/depedencies
     pub streamproctrace: *mut STREAM_PROC_TRACE,
-    #[doc = "<  flag for each slice if needed (depends on imagetype)"]
+    /// flag for each slice if needed (depends on imagetype)
     pub flagarray: *mut u64,
-    #[doc = "< For circular buffer: counter array for circular buffer, copy of cnt0 onto slice index"]
+    /// For circular buffer: counter array for circular buffer, copy of cnt0 onto slice index
     pub cntarray: *mut u64,
+    /// For each slice index: time at which data was acquires/created.
+    /// This time CAN be copied from input to output
     pub atimearray: *mut timespec,
+    /// For each slice index: time at which data was written.
+    /// This time CAN be copied from input to output
     pub writetimearray: *mut timespec,
+    
+    /// Circular Buffer (CB) option
+    /// if CBsize>0, recent frames are memcpied in circular buffer
+    /// recent frames may be accessed in small CB for logging.
+    /// 
+    /// array of CB metadata
     pub CircBuff_md: *mut CBFRAMEMD,
+    /// data storage for circ buffer
     pub CBimdata: *mut ::std::os::raw::c_void,
 }
 #[doc = " @brief data storage array\n\n The array is declared as a union, so that multiple data types can be supported \\n\n\n For 2D image with pixel indices ii (x-axis) and jj (y-axis), the pixel values are stored as array.<TYPE>[ jj * md[0].size[0] + ii ] \\n\n image md[0].size[0] is x-axis size, md[0].size[1] is y-axis size\n\n For 3D image with pixel indices ii (x-axis), jj (y-axis) and kk (z-axis), the pixel values are stored as array.<TYPE>[ kk * md[0].size[1] * md[0].size[0] + jj * md[0].size[0] + ii ] \\n\n image md[0].size[0] is x-axis size, md[0].size[1] is y-axis size, md[0].size[2] is z-axis size\n\n @note Up to this point, all members of the structure have a fixed memory offset to the start point"]

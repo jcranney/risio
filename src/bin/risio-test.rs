@@ -1,14 +1,12 @@
-use risio::{ImageType, bindings::IMAGE};
+use risio::{Accessor, RawImage};
 
 fn main() -> anyhow::Result<()> {
-    IMAGE::create_new_image_from_scratch(
-        "myimname",
-        2,
-        &[3, 4, 0],
-        risio::DataType::F64,
-        3,
-        ImageType::image(),
-        2,
-    )?;
+    // let mut image: RawImage<u64> = RawImage::create_new("myimname", &[10, 12])?;
+    let mut image: RawImage<u64> = RawImage::open("myimname")?;
+    println!("{}", image.array()[0]);
+    for x in std::io::stdin().lines().into_iter() {
+        image.array_mut()[0] = x?.parse()?;
+        println!("{}", image.array()[0]);
+    }
     Ok(())
 }

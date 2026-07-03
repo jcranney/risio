@@ -18,7 +18,7 @@
       {
         defaultPackage = naersk-lib.buildPackage {
           src = ./.;
-          buildInputs = with pkgs; [ cmake pkg-config maturin python314 ];
+          buildInputs = with pkgs; [ cmake pkg-config ];
           gitSubmodules = true;
           gitAllRefs = true;
           preBuild = ''
@@ -54,7 +54,6 @@
             openblas
           ];
           shellHook = ''
-            source .venv/bin/activate
           '';
           RUST_SRC_PATH = rustPlatform.rustLibSrc;
           LIBCLANG_PATH = "${libclang.lib}/lib";

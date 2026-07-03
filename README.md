@@ -8,28 +8,33 @@ The goal of this project is to wrap the main components of ImageStreamIO somehow
 
 I'm sure this will be non-trivial, due to all of the rust safety guarantees seeming to be at odds with direct `shm` interaction, but let's see.
 
-## Inpsiration
-For the maturin/rust/python project layout and for general correctness, I'm following some patterns from [github.com:ijl/osrson](https://github.com/ijl/orjson/tree/master). I reserve the right to flip that, but currently the project layout aims to be:
+## Package Layout
+This crate will serve mostly as a library, exposing only necessary interfaces
+and trying to keep those interfaces as stable as possible for use in other
+crates.
+
+The project follows, as close as possible, the canonical "library crate" format:
+
 ```bash
+.
 ├── README.md
-├── UNLICENSE
-├── pyproject.toml
+├── Cargo.lock
 ├── Cargo.toml
-├── flake.nix  # devShell and packaged project
-│
-├── build.rs
+├── build.rs  # rules for extracting extern C library
+├── flake.lock
+├── flake.nix  # providing a dev shell and strict build testing
 ├── libImageStreamIO  # git submodule containing C library
 │   └── ...
-│
-├── src  # rust source files
+├── src
 │   ├── bindings.rs  # rust bindings for libImageStreamIO
-│   ├── lib.rs  # rust wrapper for C bindings
-│   └── python.rs  # rust interface for PyO3/Python
-│
-├── pysrc  # python source files
-│   └── risio
-├── test  # python tests
-│   ├── test_correctness.py
-│   └── ...
-└── ...  # all the automagic fluff
+│   ├── imagestreamio.rs  # (goal) safe interface for IMAGE data in SHM
+│   └── lib.rs  # bringing it all together
+├── examples
+│   └── simple_io.rs
+├── benches
+│   └── bench.rs
+├── tests
+│   ├── simple_test.rs
+│   └── system-test
+└── UNLICENSE
 ```

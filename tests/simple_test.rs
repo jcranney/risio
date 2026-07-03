@@ -2,12 +2,17 @@ use risio::{Accessor, RawImage};
 
 #[test]
 fn main() {
-    let mut image: RawImage<u64> = match RawImage::open("myimname") {
+    let mut image: RawImage = match RawImage::open("myimname") {
         Ok(img) => img,
-        Err(_) => RawImage::create_new("myimname", &[10, 12]).unwrap(),
+        Err(_) => RawImage::create_new::<u64>("myimname", &[10, 12]).unwrap(),
     };
-    let x = image.array()[0];
-    let y = (x + 1) % 5;
-    image.array_mut()[0] = y;
-    assert_eq!(image.array()[0], y);
+    let x = match image.array_mut(){
+        Ok(x) => match x {
+            risio::ShmimMutSlice::U64(x) => x,
+            _ => panic!(),
+        },
+        Err(e) => panic!("{}", e.to_string()),
+    };
+    // to get here, x must be of type u64
+    x[0] = (x[0] + 7) % 6;
 }

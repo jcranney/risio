@@ -2,8 +2,6 @@
 to regenerate with bindgen by removing comments in build.rs, but care needs to
 be taken in comparing the diff. */
 
-use rkyv::{Archive, Deserialize, Serialize};
-
 pub const IMAGESTRUCT_VERSION: &[u8; 4] = b"2.00";
 
 #[repr(C)]
@@ -354,7 +352,7 @@ type __intptr_t = ::std::os::raw::c_long;
 type __socklen_t = ::std::os::raw::c_uint;
 type __sig_atomic_t = ::std::os::raw::c_int;
 type ino_t = __ino_t;
-type pid_t = __pid_t;
+pub type pid_t = __pid_t;
 type clockid_t = __clockid_t;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -381,7 +379,7 @@ const _: () = {
     ["Offset of field: timeval::tv_usec"][::std::mem::offset_of!(timeval, tv_usec) - 8usize];
 };
 #[repr(C)]
-#[derive(Debug, Clone, Archive, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct timespec {
     pub tv_sec: __time_t,
     pub tv_nsec: __syscall_slong_t,
@@ -1606,9 +1604,9 @@ const _: () = {
 
 ///
 /// Image metadata
-/// 
+///
 #[repr(C)]
-#[derive(Debug, Clone, Archive, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct IMAGE_METADATA {
     pub version: [::std::os::raw::c_char; 32usize],
     #[doc = " @brief Image Name"]
@@ -1865,7 +1863,7 @@ const _: () = {
 /// is an argument for keeping this definition, since it would allow calling external
 /// C code from rust that interfaces with an "IMAGE" type, or providing rust-written
 /// functions for external C packages to interface with.
-/// 
+///
 /// Another option would be to define a trait that composes the C object, and then
 /// implement that trait on the rust objects.
 ///
@@ -1887,12 +1885,13 @@ pub struct IMAGE {
     /// Image usage flag
     ///  - 1 if image is used
     ///  - 0 otherwise.
+    /// 
     /// This flag is used when an array of IMAGE type is held in memory
     /// as a way to store multiple images.
-    /// 
+    ///
     /// When an image is freed, the corresponding memory (in array) is freed
     /// and this flag set to zero.
-    /// 
+    ///
     /// The active images can be listed by looking for IMAGE[i].used==1 entries.
     pub used: u8,
     /// increments when image is (re)-created
@@ -1937,11 +1936,11 @@ pub struct IMAGE {
     /// For each slice index: time at which data was written.
     /// This time CAN be copied from input to output
     pub writetimearray: *mut timespec,
-    
+
     /// Circular Buffer (CB) option
     /// if CBsize>0, recent frames are memcpied in circular buffer
     /// recent frames may be accessed in small CB for logging.
-    /// 
+    ///
     /// array of CB metadata
     pub CircBuff_md: *mut CBFRAMEMD,
     /// data storage for circ buffer

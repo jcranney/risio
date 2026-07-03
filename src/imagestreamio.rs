@@ -1,9 +1,7 @@
 use crate::bindings::*;
 use crate::error::Error;
 use anyhow::Result;
-use libc::{aligned_alloc, pid_t};
 use memmap2::MmapMut;
-use rkyv::to_bytes;
 use std::ffi::c_void;
 use std::fmt::Debug;
 use std::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
@@ -32,7 +30,7 @@ pub trait IsioDataType {
 
     fn from_bytes<T>(data: &[u8]) -> &[T] {
         let nelements = data.len() / size_of::<T>();
-        if data.len() % size_of::<T>() != 0 {
+        if !data.len().is_multiple_of(size_of::<T>()) {
             panic!();
         }
         unsafe { slice_from_raw_parts(data.as_ptr().cast(), nelements).as_ref_unchecked() }
@@ -40,7 +38,7 @@ pub trait IsioDataType {
 
     fn from_bytes_mut<T>(data: &mut [u8]) -> &mut [T] {
         let nelements = data.len() / size_of::<T>();
-        if data.len() % size_of::<T>() != 0 {
+        if !data.len().is_multiple_of(size_of::<T>()) {
             panic!();
         }
         unsafe { slice_from_raw_parts_mut(data.as_mut_ptr().cast(), nelements).as_mut_unchecked() }
@@ -121,15 +119,15 @@ impl DataType {
 impl TryFrom<u8> for DataType {
     fn try_from(value: u8) -> std::prelude::v1::Result<Self, Self::Error> {
         Ok(match value {
-            1 => Self::U8,  // uint8_t
-            2 => Self::I8,  // int8_t
-            3 => Self::U16,  // uint16_t
-            4 => Self::I16,  // int16_t
-            5 => Self::U32,  // uint32_t
-            6 => Self::I32,  // int32_t
-            7 => Self::U64,  // uint64_t
-            8 => Self::I64,  // int64_t,
-            9 => Self::F32,  // IEEE 754 single-precision binary floating-point format: binary32
+            1 => Self::U8,    // uint8_t
+            2 => Self::I8,    // int8_t
+            3 => Self::U16,   // uint16_t
+            4 => Self::I16,   // int16_t
+            5 => Self::U32,   // uint32_t
+            6 => Self::I32,   // int32_t
+            7 => Self::U64,   // uint64_t
+            8 => Self::I64,   // int64_t,
+            9 => Self::F32,   // IEEE 754 single-precision binary floating-point format: binary32
             10 => Self::F64,  // IEEE 754 double-precision binary floating-point format: binary64
             11 => Self::C64,  // complex_float
             12 => Self::C128, // complex double
@@ -137,7 +135,7 @@ impl TryFrom<u8> for DataType {
             x => return Err(Error::UnsupportedDataType(x)),
         })
     }
-    
+
     type Error = Error;
 }
 
@@ -206,7 +204,6 @@ impl ImageType {
         }
     }
 }
-
 
 const fn round_up_8(x: usize) -> usize {
     (x + 7) & !7
@@ -332,21 +329,21 @@ impl IMAGE {
             createcnt: 1,
             shmfd: -1,
             memsize: mmap.len() as u64,
-            semlog: semlog,
-            md: md,
-            array: array,
-            semptr: semptr,
-            kw: kw,
-            semfile: semfile,
+            semlog,
+            md,
+            array,
+            semptr,
+            kw,
+            semfile,
             semReadPID: sem_read_pid,
             semWritePID: sem_write_pid,
             semctrl: sem_ctrl,
             semstatus: sem_status,
             streamproctrace: stream_proc_trace,
             flagarray: [0; 10].as_mut_ptr(),
-            cntarray: cntarray,
-            atimearray: atimearray,
-            writetimearray: writetimearray,
+            cntarray,
+            atimearray,
+            writetimearray,
             CircBuff_md: circ_buff_md,
             CBimdata: cb_imdata,
         };
@@ -398,13 +395,14 @@ impl IMAGE {
             return Err(Error::CircBuffDimsWrong(naxis))?;
         }
 
+        let mut array_init: Vec<u8> = vec![0; imdatamemsize];
         let array_raw = IMAGE__bindgen_ty_1 {
-            raw: unsafe { aligned_alloc(8, imdatamemsize) },
+            raw: array_init.as_mut_ptr().cast(),
         };
 
         let nbproctrace = IMAGE_NB_PROCTRACE as usize;
 
-        let mut kw: Vec<IMAGE_KEYWORD> = (0..nb_kw).map(|_| IMAGE_KEYWORD::new()).collect();
+        let kw: Vec<IMAGE_KEYWORD> = (0..nb_kw).map(|_| IMAGE_KEYWORD::new()).collect();
 
         // - Assign pointers; initialize the semphores and their data
         let mut semptr: Vec<*mut sem_t> = vec![];
@@ -431,8 +429,8 @@ impl IMAGE {
             semptr.push(&mut semfile[semindex].semdata);
         }
 
-        let mut semlog = sem_t { __size: [0; 32] };
-        match unsafe { sem_init(&mut semlog, 1, SEMAPHORE_INITVAL) } {
+        let semlog: *mut sem_t = &mut unsafe { std::mem::zeroed() };
+        match unsafe { sem_init(semlog, 1, SEMAPHORE_INITVAL) } {
             e if e < 0 => Self::fetch_io_err()?,
             _ => (),
         };
@@ -465,7 +463,7 @@ impl IMAGE {
         let mut circ_buff_md = Vec::new();
         circ_buff_md.resize(cb_size, CBFRAMEMD::new());
 
-        let cb_imdata = unsafe { libc::malloc(imdatamemsize * cb_size) };
+        let cb_imdata: Vec<u8> = vec![0; imdatamemsize * cb_size];
 
         let mut image_memsize: usize = round_up_8(size_of::<IMAGE_METADATA>());
         image_memsize += round_up_8(imdatamemsize);
@@ -483,9 +481,7 @@ impl IMAGE {
         image_memsize += round_up_8(size_of::<CBFRAMEMD>() * cb_size);
         image_memsize += round_up_8(imdatamemsize * cb_size);
 
-        unsafe { libc::umask(0) }; // TODO: I have no idea why this umask is needed
-
-        let file_stat: libc::stat = unsafe { std::mem::zeroed() };
+        // let file_stat: stat = unsafe { std::mem::zeroed() };
         // match unsafe { libc::fstat(fd, &mut file_stat) } {
         //     e if e < 0 => {
         //         unsafe { libc::close(fd) };
@@ -504,7 +500,7 @@ impl IMAGE {
         // than that, there's no memory allocated for it in the map so accessing it will probably
         // segfault.
 
-        let md = IMAGE_METADATA {
+        let md: *mut IMAGE_METADATA = &mut IMAGE_METADATA {
             version: Self::version(),
             name: Self::_name(name),
             naxis: naxis as u8,
@@ -516,10 +512,10 @@ impl IMAGE {
             lastaccesstime: last_access_time,
             atime: timespec::new(),
             writetime: timespec::new(),
-            creatorPID: unsafe { libc::getpid() },
+            creatorPID: std::process::id() as i32,
             ownerPID: 0,
             shared: 1,
-            inode: file_stat.st_ino,
+            inode: 0, // file_stat.st_ino, TODO: learn why this is needed and set it properly
             location: -1,
             status: 0,  // TODO: find initialisastion in C library.
             flag: 0,    // TODO: find initialisastion in C library.
@@ -569,97 +565,100 @@ impl IMAGE {
         let mut mmap = MapOwner::new(file)?;
 
         mmap.get_next_mut_ptr(round_up_8(size_of::<IMAGE_METADATA>()))?
-            .copy_from_slice(&mut to_bytes::<rkyv::rancor::Error>(&md).unwrap());
+            .copy_from_slice(unsafe { from_raw_parts(md.cast(), size_of::<IMAGE_METADATA>()) });
 
         mmap.get_next_mut_ptr(round_up_8(imdatamemsize))?
             .copy_from_slice(unsafe { from_raw_parts(array_raw.UI8, imdatamemsize) });
 
         mmap.get_next_mut_ptr(round_up_8(size_of::<IMAGE_KEYWORD>() * nb_kw))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts_mut(
-                    kw.as_mut_ptr().cast(),
+                core::slice::from_raw_parts(
+                    kw.as_ptr().cast(),
                     nb_kw * size_of::<IMAGE_KEYWORD>(),
                 )
             });
 
         mmap.get_next_mut_ptr(round_up_8(size_of::<SEMFILEDATA>() * NB_SEM))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts_mut(
-                    semfile.as_mut_ptr().cast(),
+                core::slice::from_raw_parts(
+                    semfile.as_ptr().cast(),
                     NB_SEM * size_of::<SEMFILEDATA>(),
                 )
             });
 
         mmap.get_next_mut_ptr(round_up_8(size_of::<sem_t>()))?
-            .copy_from_slice(&mut unsafe { semlog.__size.map(|x| x as u8) });
+            .copy_from_slice(unsafe { from_raw_parts(semlog.cast(), size_of::<sem_t>()) });
 
         mmap.get_next_mut_ptr(round_up_8(size_of::<i32>() * NB_SEM))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts_mut(
-                    sem_read_pid.as_mut_ptr().cast(),
+                core::slice::from_raw_parts(
+                    sem_read_pid.as_ptr().cast(),
                     size_of::<i32>() * NB_SEM,
                 )
             });
         mmap.get_next_mut_ptr(round_up_8(size_of::<i32>() * NB_SEM))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts_mut(
-                    sem_write_pid.as_mut_ptr().cast(),
+                core::slice::from_raw_parts(
+                    sem_write_pid.as_ptr().cast(),
                     size_of::<i32>() * NB_SEM,
                 )
             });
         mmap.get_next_mut_ptr(round_up_8(size_of::<u32>() * NB_SEM))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts_mut(
-                    sem_ctrl.as_mut_ptr().cast(),
+                core::slice::from_raw_parts(
+                    sem_ctrl.as_ptr().cast(),
                     size_of::<u32>() * NB_SEM,
                 )
             });
         mmap.get_next_mut_ptr(round_up_8(size_of::<u32>() * NB_SEM))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts_mut(
-                    sem_write_pid.as_mut_ptr().cast(),
+                core::slice::from_raw_parts(
+                    sem_write_pid.as_ptr().cast(),
                     size_of::<u32>() * NB_SEM,
                 )
             });
         mmap.get_next_mut_ptr(round_up_8(size_of::<STREAM_PROC_TRACE>() * nbproctrace))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts_mut(
-                    stream_proc_trace.as_mut_ptr().cast(),
+                core::slice::from_raw_parts(
+                    stream_proc_trace.as_ptr().cast(),
                     size_of::<STREAM_PROC_TRACE>() * nbproctrace,
                 )
             });
         mmap.get_next_mut_ptr(round_up_8(size_of::<timespec>() * len_timedim))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts_mut(
-                    atimearray.as_mut_ptr().cast(),
+                core::slice::from_raw_parts(
+                    atimearray.as_ptr().cast(),
                     size_of::<timespec>() * len_timedim,
                 )
             });
         mmap.get_next_mut_ptr(round_up_8(size_of::<timespec>() * len_timedim))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts_mut(
-                    writetimearray.as_mut_ptr().cast(),
+                core::slice::from_raw_parts(
+                    writetimearray.as_ptr().cast(),
                     size_of::<timespec>() * len_timedim,
                 )
             });
         mmap.get_next_mut_ptr(round_up_8(size_of::<u64>() * len_timedim))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts_mut(
-                    cntarray.as_mut_ptr().cast(),
+                core::slice::from_raw_parts(
+                    cntarray.as_ptr().cast(),
                     size_of::<u64>() * len_timedim,
                 )
             });
 
         mmap.get_next_mut_ptr(round_up_8(size_of::<CBFRAMEMD>() * cb_size))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts_mut(
-                    circ_buff_md.as_mut_ptr().cast(),
+                core::slice::from_raw_parts(
+                    circ_buff_md.as_ptr().cast(),
                     size_of::<CBFRAMEMD>() * cb_size,
                 )
             });
         mmap.get_next_mut_ptr(round_up_8(imdatamemsize * cb_size))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts_mut(cb_imdata.cast(), imdatamemsize * cb_size)
+                core::slice::from_raw_parts(
+                    cb_imdata.as_ptr().cast(),
+                    imdatamemsize * cb_size,
+                )
             });
         assert_eq!(
             image_memsize, mmap.idx,

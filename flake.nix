@@ -33,6 +33,7 @@
             cargo rustc clippy cargo-watch
             cmake pkg-config cfitsio libclang.lib
             llvmPackages.libcxxClang llvmPackages.clangUseLLVM
+            rustfmt
             cargo-machete
             rust-analyzer gcc
             glib

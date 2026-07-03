@@ -5,6 +5,7 @@
     non_camel_case_types
 )]
 mod bindings;
+pub mod error;
 pub mod imagestreamio;
 
 use std::{
@@ -14,6 +15,7 @@ use std::{
 
 use anyhow::Result;
 pub use bindings::IMAGE;
+use error::Error;
 pub use imagestreamio::*;
 use memmap2::MmapMut;
 
@@ -61,6 +63,14 @@ impl<T: IsioDataType> RawImage<T> {
             ImageType::image(),
             0,
         )?;
+        let found_dt = unsafe { image.md.read().datatype };
+        if T::to_datatype() as u8 != found_dt {
+            return Err(Error::MismatchDataType {
+                expected: T::to_datatype(),
+                found: DataType::try_from(found_dt)?,
+            }
+            .into());
+        }
         Ok(Self {
             _im_name: name.to_string(),
             _image: image,

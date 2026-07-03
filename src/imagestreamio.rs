@@ -1,4 +1,5 @@
 use crate::bindings::*;
+use crate::error::Error;
 use anyhow::Result;
 use libc::{aligned_alloc, pid_t};
 use memmap2::MmapMut;
@@ -117,6 +118,29 @@ impl DataType {
     }
 }
 
+impl TryFrom<u8> for DataType {
+    fn try_from(value: u8) -> std::prelude::v1::Result<Self, Self::Error> {
+        Ok(match value {
+            1 => Self::U8,  // uint8_t
+            2 => Self::I8,  // int8_t
+            3 => Self::U16,  // uint16_t
+            4 => Self::I16,  // int16_t
+            5 => Self::U32,  // uint32_t
+            6 => Self::I32,  // int32_t
+            7 => Self::U64,  // uint64_t
+            8 => Self::I64,  // int64_t,
+            9 => Self::F32,  // IEEE 754 single-precision binary floating-point format: binary32
+            10 => Self::F64,  // IEEE 754 double-precision binary floating-point format: binary64
+            11 => Self::C64,  // complex_float
+            12 => Self::C128, // complex double
+            13 => Self::F16,  // half precision floating-point
+            x => return Err(Error::UnsupportedDataType(x)),
+        })
+    }
+    
+    type Error = Error;
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ImageType {
     pub circular_buffer: bool,
@@ -183,21 +207,6 @@ impl ImageType {
     }
 }
 
-#[derive(thiserror::Error, Debug)]
-enum Error {
-    #[error("Illegal number of axes ({}) for requested shape: {:?}. \
-    Valid images must be 1D, 2D, or 3D.", shape.len(), shape)]
-    InvalidNaxis { shape: Vec<usize> },
-    #[error("Circular buffer must have 3 dimensions, but found naxis={0}")]
-    CircBuffDimsWrong(usize),
-    #[error("Shape array is invalid; cannot contain zeros: {:?}", shape)]
-    InvalidShapeArray { shape: Vec<usize> },
-    #[error(
-        "Requested a slice from memory map which exceeds the size of the map. \
-        Map length: {map_len}, requested up to idx: {requested}"
-    )]
-    RequestingPointerBeyondRange { map_len: usize, requested: usize },
-}
 
 const fn round_up_8(x: usize) -> usize {
     (x + 7) & !7
@@ -528,18 +537,6 @@ impl IMAGE {
             imdatamemsize: imdatamemsize as u64,
             cudaMemHandle: [0; 64], // TODO: find initialisastion in C library.
         };
-
-        // Here's an excersise to try and get at what I don't understand.
-        // I have an array_raw, which is a union of arrays of all possible
-        // image data types, but ultimately I think it's equivalent to a
-        // contiguous sequence in memory.
-        //
-        // I want to store the pointer to that memory in the IMAGE object,
-        // and I want the memory itself to be mapped to a shm_file.
-        //
-        // I guess that means that the pointer needs to be pointing to the start
-        // of the mapped memory sequence, and so that sequence needs to be created
-        // first. Let's do that now.
 
         struct MapOwner {
             map: MmapMut,

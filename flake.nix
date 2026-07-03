@@ -29,13 +29,11 @@
             '';
         };
         devShell = with pkgs; mkShell rec {
-          buildInputs = [ cargo rustc rustfmt pre-commit rustPackages.clippy
-          cmake cargo-watch
-          ];
-
           packages = with pkgs; [
+            cargo rustc clippy cargo-watch
             cmake pkg-config cfitsio libclang.lib
             llvmPackages.libcxxClang llvmPackages.clangUseLLVM
+            cargo-machete
             rust-analyzer gcc
             glib
             libGL
@@ -53,8 +51,6 @@
             flex
             openblas
           ];
-          shellHook = ''
-          '';
           RUST_SRC_PATH = rustPlatform.rustLibSrc;
           LIBCLANG_PATH = "${libclang.lib}/lib";
           MILK_SHM_DIR = "/dev/shm";

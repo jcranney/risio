@@ -34,7 +34,6 @@ The project follows, as close as possible, the canonical "library crate" format:
 ├── benches
 │   └── bench.rs
 ├── tests
-│   ├── simple_test.rs
-│   └── system-test
+│   └── simple_test.rs
 └── UNLICENSE
 ```

@@ -1,6 +1,5 @@
 use crate::bindings::*;
 use anyhow::Result;
-use enum_iterator::Sequence;
 use libc::{aligned_alloc, pid_t};
 use memmap2::MmapMut;
 use rkyv::to_bytes;
@@ -10,7 +9,7 @@ use std::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
 use std::slice::from_raw_parts;
 use std::{path::PathBuf, str::FromStr};
 
-#[derive(Debug, Clone, Copy, Sequence, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DataType {
     U8 = 1, // uint8_t
     I8,     // int8_t
@@ -554,7 +553,6 @@ impl IMAGE {
                 })
             }
             fn get_next_mut_ptr(&mut self, len: usize) -> Result<&mut [u8]> {
-                println!("size of this chunk: {len}");
                 let new_idx = self.idx + len;
                 if new_idx > self.map.len() {
                     return Err(Error::RequestingPointerBeyondRange {
@@ -673,7 +671,6 @@ impl IMAGE {
         mmap.map.flush()?;
 
         let image = Self::from_mmap_mut(&mut mmap.map)?;
-        println!("{}", unsafe { image.array.UI8.read() });
         Ok((image, mmap.map))
     }
 

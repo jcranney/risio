@@ -6,7 +6,6 @@
 )]
 mod bindings;
 pub mod imagestreamio;
-pub mod python;
 
 use std::{
     marker::PhantomData,

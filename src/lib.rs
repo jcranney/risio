@@ -7,16 +7,17 @@
 mod bindings;
 pub mod error;
 pub mod imagestreamio;
+pub mod datatype;
 
 use std::{
     marker::PhantomData,
     slice::{from_raw_parts, from_raw_parts_mut},
 };
 
+use datatype::*;
 use anyhow::Result;
 pub use bindings::IMAGE;
 use error::Error;
-pub use imagestreamio::*;
 use memmap2::MmapMut;
 
 pub trait Accessor {
@@ -44,7 +45,7 @@ pub trait Accessor {
     }
 }
 
-pub struct RawImage<T> {
+pub struct RawImage<T: IsioDataType> {
     pub _im_name: String,
     pub _image: IMAGE,
     _phantom_data: PhantomData<T>,
@@ -64,7 +65,7 @@ impl<T: IsioDataType> RawImage<T> {
             0,
         )?;
         let found_dt = unsafe { image.md.read().datatype };
-        if T::to_datatype() as u8 != found_dt {
+        if Into::<u8>::into(T::to_datatype()) != found_dt {
             return Err(Error::MismatchDataType {
                 expected: T::to_datatype(),
                 found: DataType::try_from(found_dt)?,

@@ -1,4 +1,0 @@
-[submodule "libImageStreamIO"]
-	path = libImageStreamIO
-	url = https://github.com/jcranney/ImageStreamIO
-	branch = dev

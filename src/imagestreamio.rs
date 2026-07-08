@@ -1,7 +1,6 @@
 use crate::bindings::*;
 use crate::error::Error;
 use crate::datatype::*;
-use anyhow::Result;
 use memmap2::MmapMut;
 use std::ffi::c_void;
 use std::slice::from_raw_parts;
@@ -23,7 +22,7 @@ impl IMAGE {
         out
     }
 
-    fn sm_pname(name: &str) -> Result<PathBuf> {
+    fn sm_pname(name: &str) -> Result<PathBuf, Error> {
         Ok(PathBuf::from_str(&format!("/dev/shm/{name}.im.shm"))?)
     }
 
@@ -38,7 +37,7 @@ impl IMAGE {
         version
     }
 
-    fn fetch_io_err<T>() -> Result<T> {
+    fn fetch_io_err<T>() -> Result<T, Error> {
         let x = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
         Err(std::io::Error::from_raw_os_error(x))?
     }
@@ -47,7 +46,7 @@ impl IMAGE {
     //     todo!()
     // }
 
-    fn from_mmap_mut(mmap: &mut MmapMut) -> Result<Self> {
+    fn from_mmap_mut(mmap: &mut MmapMut) -> Result<Self, Error> {
         // so now we want to populate the data in a new IMAGE from mmap.
         // I guess either the mmap data is contiguous, or the IMAGE data is
         // contiguous, not both. So perhaps the IMAGE data is all simply cloned
@@ -162,7 +161,7 @@ impl IMAGE {
         cb_size: usize,
         // shared: bool,  (shared==true for now...)
         // int8_t location, (-1: CPU RAM for now)
-    ) -> Result<(Self, MmapMut)> {
+    ) -> Result<(Self, MmapMut), Error> {
         let naxis: usize = shape.len();
         const NB_SEM: usize = IMAGE_NB_SEMAPHORE as usize;
 
@@ -219,7 +218,7 @@ impl IMAGE {
             let mut semfile_tmp: SEMFILEDATA = SEMFILEDATA {
                 semdata: unsafe { std::mem::zeroed() },
             };
-            match unsafe { sem_init(&mut semfile_tmp.semdata, 1, SEMAPHORE_INITVAL) } {
+            match unsafe { libc::sem_init(&mut semfile_tmp.semdata, 1, SEMAPHORE_INITVAL) } {
                 e if e < 0 => Self::fetch_io_err()?,
                 _ => (),
             };
@@ -232,7 +231,7 @@ impl IMAGE {
         }
 
         let semlog: *mut sem_t = &mut unsafe { std::mem::zeroed() };
-        match unsafe { sem_init(semlog, 1, SEMAPHORE_INITVAL) } {
+        match unsafe { libc::sem_init(semlog, 1, SEMAPHORE_INITVAL) } {
             e if e < 0 => Self::fetch_io_err()?,
             _ => (),
         };
@@ -255,8 +254,8 @@ impl IMAGE {
         //         axis_encoding_code: ZAxisEncodingCode::TemporalCoordinate,
         //         ..
         //     } => {
-        atimearray.resize(len_timedim, timespec::new());
-        writetimearray.resize(len_timedim, timespec::new());
+        atimearray.resize(len_timedim, timespec{ tv_sec: 0, tv_nsec: 0 });
+        writetimearray.resize(len_timedim, timespec{ tv_sec: 0, tv_nsec: 0 });
         cntarray.resize(len_timedim, 0);
         //     }
         //     _ => (),
@@ -293,10 +292,10 @@ impl IMAGE {
         //     _ => unreachable!(),
         // };
 
-        let mut last_access_time = timespec::new();
-        unsafe { clock_gettime(CLOCK_TAI as i32, &mut last_access_time) };
-        let mut creation_time = timespec::new();
-        unsafe { clock_gettime(CLOCK_TAI as i32, &mut creation_time) };
+        let mut last_access_time = libc::timespec{ tv_sec: 0, tv_nsec: 0 };
+        unsafe { libc::clock_gettime(CLOCK_TAI as i32, &mut last_access_time) };
+        let mut creation_time = libc::timespec{ tv_sec: 0, tv_nsec: 0 };
+        unsafe { libc::clock_gettime(CLOCK_TAI as i32, &mut creation_time) };
 
         // let flagarray: [u64; 10] = [0; 10]; // TODO: This isn't initialised in ISIO, but worse
         // than that, there's no memory allocated for it in the map so accessing it will probably
@@ -312,8 +311,8 @@ impl IMAGE {
             imagetype: imagetype.into(),
             creationtime: creation_time,
             lastaccesstime: last_access_time,
-            atime: timespec::new(),
-            writetime: timespec::new(),
+            atime: timespec{ tv_sec: 0, tv_nsec: 0 },
+            writetime: timespec{ tv_sec: 0, tv_nsec: 0 },
             creatorPID: std::process::id() as i32,
             ownerPID: 0,
             shared: 1,
@@ -341,13 +340,13 @@ impl IMAGE {
             idx: usize,
         }
         impl MapOwner {
-            fn new(file: std::fs::File) -> Result<Self> {
+            fn new(file: std::fs::File) -> Result<Self, Error> {
                 Ok(Self {
                     map: unsafe { MmapMut::map_mut(&file)? },
                     idx: 0,
                 })
             }
-            fn get_next_mut_ptr(&mut self, len: usize) -> Result<&mut [u8]> {
+            fn get_next_mut_ptr(&mut self, len: usize) -> Result<&mut [u8], Error> {
                 let new_idx = self.idx + len;
                 if new_idx > self.map.len() {
                     return Err(Error::RequestingPointerBeyondRange {
@@ -472,7 +471,7 @@ impl IMAGE {
         Ok((image, mmap.map))
     }
 
-    pub fn open_image(name: &str) -> Result<(Self, MmapMut)> {
+    pub fn open_image(name: &str) -> Result<(Self, MmapMut), Error> {
         let file = std::fs::File::options()
             .read(true)
             .write(true)

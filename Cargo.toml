@@ -12,7 +12,7 @@ cmake = "0.1.58"
 # bindgen = "0.72.1"
 
 [dependencies]
-anyhow = "1.0.103"
+libc = "0.2.186"
 memmap2 = "0.9.11"
 thiserror = "2.0.18"
 

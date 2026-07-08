@@ -15,7 +15,6 @@ use std::{
 };
 
 use datatype::*;
-use anyhow::Result;
 pub use bindings::IMAGE;
 use error::Error;
 use memmap2::MmapMut;
@@ -55,7 +54,7 @@ pub struct RawImage<T: IsioDataType> {
 impl<T: IsioDataType> RawImage<T> {
     /// Create a new image with the specified name and shape. Returns an error
     /// if the image already exists.
-    pub fn create_new(name: &str, shape: &[usize]) -> Result<Self> {
+    pub fn create_new(name: &str, shape: &[usize]) -> Result<Self, Error> {
         let (image, mmap) = IMAGE::create_new_image_from_scratch(
             name,
             shape,
@@ -82,7 +81,7 @@ impl<T: IsioDataType> RawImage<T> {
 
     /// Open an image with a specified name. Returns an error if the image
     /// doesnt exist, or if it exists with the wrong datatype.
-    pub fn open(name: &str) -> Result<Self> {
+    pub fn open(name: &str) -> Result<Self, Error> {
         let (image, mmap) = IMAGE::open_image(name)?;
         Ok(Self {
             _im_name: name.to_string(),

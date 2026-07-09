@@ -14,7 +14,7 @@ use std::{
     slice::{from_raw_parts, from_raw_parts_mut},
 };
 
-use anyhow::Result;
+use datatype::*;
 pub use bindings::IMAGE;
 use datatype::*;
 use error::Error;
@@ -132,7 +132,7 @@ pub struct RawImage<'a, T: IsioDataType> {
 impl<'a, T: IsioDataType> RawImage<'a, T> {
     /// Create a new image with the specified name and shape. Returns an error
     /// if the image already exists.
-    pub fn create_new(name: &str, shape: &[usize]) -> Result<Self> {
+    pub fn create_new(name: &str, shape: &[usize]) -> Result<Self, Error> {
         let image = Image::create_new_image_from_scratch(
             name,
             shape,
@@ -159,7 +159,7 @@ impl<'a, T: IsioDataType> RawImage<'a, T> {
 
     /// Open an image with a specified name. Returns an error if the image
     /// doesnt exist, or if it exists with the wrong datatype.
-    pub fn open(name: &str) -> Result<Self> {
+    pub fn open(name: &str) -> Result<Self, Error> {
         let image = Image::open_image(name)?;
         Ok(Self {
             _im_name: name.to_string(),

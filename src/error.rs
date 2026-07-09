@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use crate::DataType;
 
 #[derive(thiserror::Error, Debug)]
@@ -18,4 +20,20 @@ pub enum Error {
     MismatchDataType{expected: DataType, found: DataType},
     #[error("Unsupported data type index: {0}")]
     UnsupportedDataType(u8),
+    #[error("std::io error: {0}")]
+    StdIoError(std::io::Error),
+    #[error("impossible error, you must feel very special! {0}")]
+    Impossible(Infallible)
+}
+
+impl From<std::io::Error> for Error {
+    fn from(value: std::io::Error) -> Self {
+        Error::StdIoError(value)
+    }
+}
+
+impl From<Infallible> for Error {
+    fn from(value: Infallible) -> Self {
+        Error::Impossible(value)
+    }
 }

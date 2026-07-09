@@ -8,15 +8,15 @@ const IMNAME: &str = "benchy";
 const IMSHAPE: &[usize; 2] = &[1000, 1200];
 
 fn par_modify_image(image: &mut RawImage<f64>) {
-    image.array_mut().par_iter_mut().for_each(|x| {
-        *x = (*x + 42.0) % 41.0;
-    });
+    // image.array_mut().par_iter_mut().for_each(|x| {
+    //     *x = (*x + 42.0) % 41.0;
+    // });
 }
 
 fn modify_image(image: &mut RawImage<f64>) {
-    image.array_mut().iter_mut().for_each(|x| {
-        *x = (*x + 42.0) % 41.0;
-    });
+    // image.array_mut().iter_mut().for_each(|x| {
+    //     *x = (*x + 42.0) % 41.0;
+    // });
 }
 
 fn bench_modify_image(c: &mut Criterion) {

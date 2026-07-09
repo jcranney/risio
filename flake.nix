@@ -18,15 +18,6 @@
       {
         defaultPackage = naersk-lib.buildPackage {
           src = ./.;
-          buildInputs = with pkgs; [ cmake pkg-config ];
-          gitSubmodules = true;
-          gitAllRefs = true;
-          preBuild = ''
-            ls
-            find \
-                  -name CMakeCache.txt \
-                  -exec rm {} \;
-            '';
         };
         devShell = with pkgs; mkShell rec {
           packages = with pkgs; [

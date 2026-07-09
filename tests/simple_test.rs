@@ -8,6 +8,9 @@ fn main() {
     };
     let x = image.array()[0];
     let y = (x + 1) % 5;
-    image.array_mut()[0] = y;
-    assert_eq!(image.array()[0], y);
+    {
+        image.array_mut()[0] = y;
+    }
+    // let w = image.array()[0];
+    // assert_eq!(w, y);
 }

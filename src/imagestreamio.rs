@@ -1,17 +1,20 @@
+use crate::TimeSpec;
 use crate::bindings::*;
-use crate::error::Error;
 use crate::datatype::*;
+use crate::error::Error;
+use crate::imagestreamio::byte_structs::*;
 use anyhow::Result;
 use memmap2::MmapMut;
 use std::ffi::c_void;
 use std::slice::from_raw_parts;
+use std::slice::from_raw_parts_mut;
 use std::{path::PathBuf, str::FromStr};
 
 const fn round_up_8(x: usize) -> usize {
     (x + 7) & !7
 }
 
-impl IMAGE {
+impl<'a> Image<'a> {
     fn _name(name: &str) -> [i8; STRINGMAXLEN_IMAGE_NAME as usize] {
         let mut out = [0; STRINGMAXLEN_IMAGE_NAME as usize];
         for (out_i, in_i) in out.iter_mut().zip(name.as_bytes()) {
@@ -47,107 +50,127 @@ impl IMAGE {
     //     todo!()
     // }
 
-    fn from_mmap_mut(mmap: &mut MmapMut) -> Result<Self> {
+    unsafe fn from_mmap_mut(mut mmap: MmapMut) -> Result<Self> {
         // so now we want to populate the data in a new IMAGE from mmap.
         // I guess either the mmap data is contiguous, or the IMAGE data is
         // contiguous, not both. So perhaps the IMAGE data is all simply cloned
         // from the SHM, including pointers etc.s
-
-        let mut idx = 0;
+        todo!();
+        let memsize = mmap.len();
 
         // first up is image metadata.
-        let len = round_up_8(size_of::<IMAGE_METADATA>());
-        let md: *mut IMAGE_METADATA = mmap[idx..idx + len].as_mut_ptr().cast();
-        idx += len;
+        let (chunk, leftover) = mmap.split_at_mut(round_up_8(size_of::<ImageMetadata>()));
+        let md: &mut ImageMetadata = unsafe {
+            chunk
+                .as_mut_ptr()
+                .cast::<ImageMetadata>()
+                .as_mut_unchecked()
+        };
 
-        let md_tmp: IMAGE_METADATA = unsafe { md.read().clone() };
+        let md_tmp = md.clone();
 
         // image array:
-        let len = round_up_8(md_tmp.imdatamemsize as usize);
-        let array: IMAGE__bindgen_ty_1 = IMAGE__bindgen_ty_1 {
-            UI8: mmap[idx..idx + len].as_mut_ptr().cast(),
-        };
-        idx += len;
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(md_tmp.imdatamemsize as usize));
+        let array = chunk;
 
-        let len = round_up_8(size_of::<IMAGE_KEYWORD>() * md_tmp.NBkw as usize);
-        let kw: *mut IMAGE_KEYWORD = mmap[idx..idx + len].as_mut_ptr().cast();
-        idx += len;
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(
+            size_of::<ImageKeyword>() * md_tmp.nb_kw as usize,
+        ));
+        let kw: &mut [ImageKeyword] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.nb_kw as usize) };
 
-        let len = round_up_8(size_of::<SEMFILEDATA>() * md_tmp.sem as usize);
-        let semfile: *mut SEMFILEDATA = mmap[idx..idx + len].as_mut_ptr().cast();
-        idx += len;
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<SemFileData>() * md_tmp.sem as usize));
+        let semfile: &mut [SemFileData] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
 
-        let len = round_up_8(size_of::<sem_t>());
-        let semlog: *mut sem_t = mmap[idx..idx + len].as_mut_ptr().cast();
-        idx += len;
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(size_of::<Sem>()));
+        let semlog: &mut Sem = { unsafe { chunk.as_mut_ptr().cast::<Sem>().as_mut_unchecked() } };
 
-        let len = round_up_8(size_of::<i32>() * md_tmp.sem as usize);
-        let sem_read_pid: *mut pid_t = mmap[idx..idx + len].as_mut_ptr().cast();
-        idx += len;
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<i32>() * md_tmp.sem as usize));
+        let sem_read_pid: &mut [i32] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
 
-        let len = round_up_8(size_of::<i32>() * md_tmp.sem as usize);
-        let sem_write_pid: *mut pid_t = mmap[idx..idx + len].as_mut_ptr().cast();
-        idx += len;
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<i32>() * md_tmp.sem as usize));
+        let sem_write_pid: &mut [i32] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
 
-        let len = round_up_8(size_of::<u32>() * md_tmp.sem as usize);
-        let sem_ctrl: *mut u32 = mmap[idx..idx + len].as_mut_ptr().cast();
-        idx += len;
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<u32>() * md_tmp.sem as usize));
+        let sem_ctrl: &mut [u32] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
 
-        let len = round_up_8(size_of::<u32>() * md_tmp.sem as usize);
-        let sem_status: *mut u32 = mmap[idx..idx + len].as_mut_ptr().cast();
-        idx += len;
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<u32>() * md_tmp.sem as usize));
+        let sem_status: &mut [u32] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
 
-        let len = round_up_8(size_of::<STREAM_PROC_TRACE>() * IMAGE_NB_PROCTRACE as usize);
-        let stream_proc_trace: *mut STREAM_PROC_TRACE = mmap[idx..idx + len].as_mut_ptr().cast();
-        idx += len;
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(
+            size_of::<StreamProcTrace>() * IMAGE_NB_PROCTRACE as usize,
+        ));
+        let stream_proc_trace: &mut [StreamProcTrace] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), IMAGE_NB_PROCTRACE as usize) };
 
-        let len = round_up_8(size_of::<timespec>() * md_tmp.size[2] as usize);
-        let atimearray: *mut timespec = mmap[idx..idx + len].as_mut_ptr().cast();
-        idx += len;
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<TimeSpec>() * md_tmp.size[2] as usize));
+        let atimearray: &mut [TimeSpec] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.size[2] as usize) };
 
-        let len = round_up_8(size_of::<timespec>() * md_tmp.size[2] as usize);
-        let writetimearray: *mut timespec = mmap[idx..idx + len].as_mut_ptr().cast();
-        idx += len;
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<TimeSpec>() * md_tmp.size[2] as usize));
+        let writetimearray: &mut [TimeSpec] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.size[2] as usize) };
 
-        let len = round_up_8(size_of::<u64>() * md_tmp.size[2] as usize);
-        let cntarray: *mut u64 = mmap[idx..idx + len].as_mut_ptr().cast();
-        idx += len;
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<u64>() * md_tmp.size[2] as usize));
+        let cntarray: &mut [u64] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.size[2] as usize) };
 
-        let len = round_up_8(size_of::<CBFRAMEMD>() * md_tmp.CBsize as usize);
-        let circ_buff_md: *mut CBFRAMEMD = mmap[idx..idx + len].as_mut_ptr().cast();
-        idx += len;
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(
+            size_of::<CBFrameMetadata>() * md_tmp.cb_size as usize,
+        ));
+        let circ_buff_md: &mut [CBFrameMetadata] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.cb_size as usize) };
 
-        let len = round_up_8(md_tmp.imdatamemsize as usize * md_tmp.CBsize as usize);
-        let cb_imdata: *mut c_void = mmap[idx..idx + len].as_mut_ptr().cast();
-        idx += len;
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(
+            md_tmp.imdatamemsize as usize * md_tmp.cb_size as usize,
+        ));
+        let cb_imdata: &mut [u8] = chunk;
 
-        let semptr: *mut *mut sem_t = &mut semfile.cast();
+        // let semptr: &mut [&mut Sem] = &mut semfile.iter_mut().map(|s| {
+        //     let SemFileData { semdata } = s;
+        //     semdata
+        // }).collect();
 
-        assert_eq!(idx, mmap.len());
+        // should be nothing left in mmap:
+        assert_eq!(leftover.len(), 0);
 
-        let image = IMAGE {
+        let image = Self {
             name: md_tmp.name,
             used: 1,
             createcnt: 1,
             shmfd: -1,
-            memsize: mmap.len() as u64,
+            memsize: memsize as u64,
             semlog,
             md,
             array,
-            semptr,
+            // semptr,
             kw,
             semfile,
-            semReadPID: sem_read_pid,
-            semWritePID: sem_write_pid,
+            sem_read_pid,
+            sem_write_pid,
             semctrl: sem_ctrl,
             semstatus: sem_status,
             streamproctrace: stream_proc_trace,
-            flagarray: [0; 10].as_mut_ptr(),
+            // flagarray: [].as_mut(),
             cntarray,
             atimearray,
             writetimearray,
-            CircBuff_md: circ_buff_md,
-            CBimdata: cb_imdata,
+            circ_buff_md,
+            cb_imdata,
+            mmap: None,
         };
 
         Ok(image)
@@ -162,7 +185,7 @@ impl IMAGE {
         cb_size: usize,
         // shared: bool,  (shared==true for now...)
         // int8_t location, (-1: CPU RAM for now)
-    ) -> Result<(Self, MmapMut)> {
+    ) -> Result<Self> {
         let naxis: usize = shape.len();
         const NB_SEM: usize = IMAGE_NB_SEMAPHORE as usize;
 
@@ -374,10 +397,7 @@ impl IMAGE {
 
         mmap.get_next_mut_ptr(round_up_8(size_of::<IMAGE_KEYWORD>() * nb_kw))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts(
-                    kw.as_ptr().cast(),
-                    nb_kw * size_of::<IMAGE_KEYWORD>(),
-                )
+                core::slice::from_raw_parts(kw.as_ptr().cast(), nb_kw * size_of::<IMAGE_KEYWORD>())
             });
 
         mmap.get_next_mut_ptr(round_up_8(size_of::<SEMFILEDATA>() * NB_SEM))?
@@ -393,10 +413,7 @@ impl IMAGE {
 
         mmap.get_next_mut_ptr(round_up_8(size_of::<i32>() * NB_SEM))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts(
-                    sem_read_pid.as_ptr().cast(),
-                    size_of::<i32>() * NB_SEM,
-                )
+                core::slice::from_raw_parts(sem_read_pid.as_ptr().cast(), size_of::<i32>() * NB_SEM)
             });
         mmap.get_next_mut_ptr(round_up_8(size_of::<i32>() * NB_SEM))?
             .copy_from_slice(unsafe {
@@ -407,10 +424,7 @@ impl IMAGE {
             });
         mmap.get_next_mut_ptr(round_up_8(size_of::<u32>() * NB_SEM))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts(
-                    sem_ctrl.as_ptr().cast(),
-                    size_of::<u32>() * NB_SEM,
-                )
+                core::slice::from_raw_parts(sem_ctrl.as_ptr().cast(), size_of::<u32>() * NB_SEM)
             });
         mmap.get_next_mut_ptr(round_up_8(size_of::<u32>() * NB_SEM))?
             .copy_from_slice(unsafe {
@@ -457,22 +471,19 @@ impl IMAGE {
             });
         mmap.get_next_mut_ptr(round_up_8(imdatamemsize * cb_size))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts(
-                    cb_imdata.as_ptr().cast(),
-                    imdatamemsize * cb_size,
-                )
+                core::slice::from_raw_parts(cb_imdata.as_ptr().cast(), imdatamemsize * cb_size)
             });
         assert_eq!(
             image_memsize, mmap.idx,
             "unexpected data size, something is wrong."
         );
         mmap.map.flush()?;
-
-        let image = Self::from_mmap_mut(&mut mmap.map)?;
-        Ok((image, mmap.map))
+        let mut map = mmap.map;
+        let mut image = unsafe { Self::from_mmap_mut(map) }?;
+        Ok(image)
     }
 
-    pub fn open_image(name: &str) -> Result<(Self, MmapMut)> {
+    pub fn open_image(name: &str) -> Result<Self> {
         let file = std::fs::File::options()
             .read(true)
             .write(true)
@@ -480,7 +491,233 @@ impl IMAGE {
 
         let mut mmap = unsafe { MmapMut::map_mut(&file) }?;
 
-        let image = Self::from_mmap_mut(&mut mmap)?;
-        Ok((image, mmap))
+        let image = unsafe { Self::from_mmap_mut(mmap) }?;
+        Ok(image)
     }
+}
+
+pub mod byte_structs {
+    //! All of the structs defined in this module have the exact same byte representation
+    //! as their native C type, and can be directly transmuted from the bits in
+    //! memory. It's not clear how to guarantee that the byte representation is
+    //! the same, except through inspecting with the `bindgen` generated structs.
+    //!
+    //! Ensuring that the byte values are *valid* values is a different story, and
+    //! that is beyond the scope of the struct implementation. It should always be
+    //! possible to transmute from a sequence of bytes into these types.
+
+    /// The ImageKeyword structure contains a name, value, count and comment,
+    /// and a c_char valued discriminant with the legal values of:
+    ///  - c'N', unused,
+    ///  - c'L', long,
+    ///  - c'D', double,
+    ///  - c'S', 16-char string.
+    #[repr(C)]
+    pub struct ImageKeyword {
+        pub name: [u8; 16],
+        /// N: unused, L: long, D: double, S: 16-char string
+        pub keyword_type: u8,
+        pub value: KeywordValue,
+        pub cnt: u64,
+        pub comment: [u8; 80],
+    }
+
+    /// Keyword value - in order to reference directly from memory we keep a
+    /// union representation, despite that being unsafe and annoying.
+    #[repr(C)]
+    pub union KeywordValue {
+        numl: i64,
+        numf: f64,
+        valstr: [u8; 16],
+    }
+
+    /// StreamProcTrace holds trigger and timing info. Array of StreamProcTrace
+    /// is held within streams to track history. This information is assembled
+    /// by a process, and then written to all streams it writes.
+    #[repr(C)]
+    #[derive(Debug, Clone)]
+    pub struct StreamProcTrace {
+        triggermode: i32,
+        /// PID of process writing stream. 0 if no entry
+        procwrite_pid: i32,
+        /// trigger stream inode
+        trigger_inode: i64,
+        /// timestamp process triggered
+        ts_procstart: TimeSpec,
+        /// timestamp write this stream
+        ts_streamupdate: TimeSpec,
+        /// trigger semaphore
+        trigsemindex: i32,
+        triggerstatus: i32,
+        /// trigger stream cnt0 value at trigger
+        cnt0: u64,
+    }
+
+    /// Circular Buffer Frame Metadata
+    #[repr(C)]
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct CBFrameMetadata {
+        cnt0: u64,
+        cnt1: u64,
+        atime: TimeSpec,
+        writetime: TimeSpec,
+    }
+
+    /// TimeSpec, used for any "instant" style timestamp.
+    #[repr(C)]
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct TimeSpec {
+        pub tv_sec: u64,
+        pub tv_nsec: u64,
+    }
+
+    /// Image metadata
+    #[repr(C)]
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct ImageMetadata {
+        pub version: [std::os::raw::c_char; 32usize],
+        #[doc = " @brief Image Name"]
+        pub name: [std::os::raw::c_char; 80usize],
+        #[doc = " @brief Number of axis\n\n @warning 1, 2 or 3. Values above 3 not supported."]
+        pub naxis: u8,
+        #[doc = " @brief Image size along each axis\n\n  If naxis = 1 (1D image), size[1] and size[2] are irrelevant"]
+        pub size: [u32; 3usize],
+        #[doc = " @brief Number of elements in image\n\n This is computed upon image creation"]
+        pub nelement: u64,
+        #[doc = " @brief Data type\n\n Encoded according to data type defines.\n  -  1: uint8_t\n \t-  2: int8_t\n \t-  3: uint16_t\n \t-  4: int16_t\n \t-  5: uint32_t\n \t-  6: int32_t\n \t-  7: uint64_t\n \t-  8: int64_t\n \t-  9: IEEE 754 single-precision binary floating-point format: binary32\n  - 10: IEEE 754 double-precision binary floating-point format: binary64\n  - 11: complex_float\n  - 12: complex double\n  - 13: half precision floating-point\n"]
+        pub datatype: u8,
+        #[doc = "< image type"]
+        pub imagetype: u64,
+        pub creationtime: TimeSpec,
+        pub lastaccesstime: TimeSpec,
+        pub atime: TimeSpec,
+        pub writetime: TimeSpec,
+        #[doc = "< PID of process that created the stream (if shared = 1)"]
+        pub creator_pid: std::os::raw::c_int,
+        #[doc = "< PID of process owning the stream (if shared = 1)"]
+        pub owner_pid: std::os::raw::c_int,
+        #[doc = "< stream is in shared memory"]
+        pub shared: u8,
+        #[doc = "< inode nummber if shared memory"]
+        pub inode: std::os::raw::c_ulong,
+        #[doc = "< -1 if in CPU memory, >=0 if in GPU memory on `location` device"]
+        pub location: i8,
+        #[doc = "< 1 to log image (default); 0 : do not log: 2 : stop log (then goes back to 2)"]
+        pub status: u8,
+        #[doc = "< bitmask, encodes read/write permissions.... NOTE: enum instead of defines"]
+        pub flag: u64,
+        #[doc = "< set to 1 to start logging"]
+        pub logflag: u8,
+        #[doc = "< number of semaphores supported, specified at image creation"]
+        pub sem: u16,
+        #[doc = "< number of streamproctrace entries"]
+        pub nb_proc_trace: u16,
+        #[doc = "< counter (incremented if image is updated)"]
+        pub cnt0: u64,
+        #[doc = "< in 3D rolling buffer image, this is the last slice written"]
+        pub cnt1: u64,
+        #[doc = "< in cnt2-based syncronization, proceed until cnt0=cnt2"]
+        pub cnt2: u64,
+        #[doc = "< 1 if image is being written"]
+        pub write: u8,
+        #[doc = "< number of keywords (max: 65536)"]
+        pub nb_kw: u16,
+        pub cb_size: u32,
+        pub cb_index: u32,
+        pub cb_cycle: u64,
+        pub imdatamemsize: u64,
+        pub cuda_mem_handle: [std::os::raw::c_char; 64usize],
+    }
+
+    #[repr(C)]
+    #[derive(Copy, Clone)]
+    pub union Sem {
+        pub __size: [std::os::raw::c_char; 32usize],
+        pub __align: std::os::raw::c_long,
+    }
+
+    #[repr(C)]
+    #[derive(Copy, Clone)]
+    pub struct SemFileData {
+        pub semdata: Sem,
+    }
+}
+
+/// This type has the same objects as the equivalent IMAGE struct in ISIO,
+/// but importantly uses mutable references rather than raw pointers, so
+/// CANNOT be mapped by bytes to the same representation in C. If this object
+/// is to be used in FFI, then it will need to be mapped first to a "raw"
+/// IMAGE object.
+#[repr(C)]
+#[derive()]
+pub struct Image<'a> {
+    /// local name (can be different from name in shared memory)
+    pub name: [std::os::raw::c_char; 80usize],
+    /// Image usage flag
+    ///  - 1 if image is used
+    ///  - 0 otherwise.
+    ///
+    /// This flag is used when an array of IMAGE type is held in memory
+    /// as a way to store multiple images.
+    ///
+    /// When an image is freed, the corresponding memory (in array) is freed
+    /// and this flag set to zero.
+    ///
+    /// The active images can be listed by looking for IMAGE[i].used==1 entries.
+    pub used: u8,
+    /// increments when image is (re)-created
+    pub createcnt: i64,
+    /// if shared memory, file descriptor
+    pub shmfd: i32,
+    /// total size in memory if shared
+    pub memsize: u64,
+    /// pointer to semaphore for logging  (8 bytes on 64-bit system)
+    pub semlog: &'a mut Sem,
+    /// pointer to image metadata
+    pub md: &'a mut ImageMetadata,
+    /// pointer to data array
+    pub array: &'a mut [u8],
+
+    // TODO:
+    // /// array of pointers to semaphores   (each 8 bytes on 64-bit system)
+    // pub semptr: &'a mut [&'a mut Sem],
+    /// array of image Keywords
+    pub kw: &'a mut [ImageKeyword],
+    /// array of semfiles
+    pub semfile: &'a mut [SemFileData],
+    /// PID of process that read shared memory stream
+    /// Initialized at 0. Otherwise, when process is waiting on semaphore, its PID is written in this array
+    /// The array can be used to look for available semaphores
+    pub sem_read_pid: &'a mut [std::os::raw::c_int],
+    /// PID of processes that are posting the semaphores (JC: I guess there should usually only be one?)
+    pub sem_write_pid: &'a mut [std::os::raw::c_int],
+    /// semaphore control, written by writer to control semaphore behavior.
+    /// See SEMAPHORE_CONTROL_XXX defines for details
+    pub semctrl: &'a mut [u32],
+    /// semaphore status, written by readers to report back to stream what is their current status.
+    /// See SEMAPHORE_STATUS_XXX defines for details
+    pub semstatus: &'a mut [u32],
+    // array to keep track of stream history/depedencies
+    pub streamproctrace: &'a mut [StreamProcTrace],
+    // /// flag for each slice if needed (depends on imagetype)
+    // pub flagarray: &'a mut [u64],
+    /// For circular buffer: counter array for circular buffer, copy of cnt0 onto slice index
+    pub cntarray: &'a mut [u64],
+    /// For each slice index: time at which data was acquires/created.
+    /// This time CAN be copied from input to output
+    pub atimearray: &'a mut [TimeSpec],
+    /// For each slice index: time at which data was written.
+    /// This time CAN be copied from input to output
+    pub writetimearray: &'a mut [TimeSpec],
+
+    /// Circular Buffer (CB) option
+    /// if CBsize>0, recent frames are memcpied in circular buffer
+    /// recent frames may be accessed in small CB for logging.
+    ///
+    /// array of CB metadata
+    pub circ_buff_md: &'a mut [CBFrameMetadata],
+    /// data storage for circ buffer
+    pub cb_imdata: &'a mut [u8],
+    /// memory mapping
+    pub mmap: Option<MmapMut>,
 }

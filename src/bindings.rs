@@ -351,7 +351,7 @@ type __caddr_t = *mut ::std::os::raw::c_char;
 type __intptr_t = ::std::os::raw::c_long;
 type __socklen_t = ::std::os::raw::c_uint;
 type __sig_atomic_t = ::std::os::raw::c_int;
-type ino_t = __ino_t;
+pub type ino_t = __ino_t;
 pub type pid_t = __pid_t;
 type clockid_t = __clockid_t;
 #[repr(C)]

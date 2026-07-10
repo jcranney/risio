@@ -13,15 +13,12 @@ fn main() -> Result<(), Error> {
             RawImage::open("noise")?
         }
     };
-    // unsafe { libc::sem_init(image._image.semlog, 1, 1) };
     let mut cnt: usize = 0;
-    // let array = image.array_mut();
-    // unsafe { libc::sem_post(image._image.sem_log.get().read()) };
-
     loop {
         cnt += 1;
         (unsafe { image.modify(|x| *x = random()) })?;
         unsafe { image.sem_post(0) };
+        println!("semval: {}", unsafe { image.sem_val(0) });
         println!("{cnt}: posted!");
         std::thread::sleep(Duration::from_millis(100));
     }

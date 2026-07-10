@@ -65,15 +65,35 @@ pub trait Accessor<'a> {
     //     Ok(())
     // }
     unsafe fn sem_post(&'a self, idx: usize) {
-        let mut s = unsafe { self.image().sem_file.get().read() }[idx];
-        unsafe {
-            libc::sem_post(&mut s);
+        let s = &mut unsafe { self.image().sem_file.get().read() }[idx];
+        let result = unsafe {
+            libc::sem_post( s)
+        };
+        if result < 0 {
+            panic!();
         }
     }
     unsafe fn sem_wait(&'a self, idx: usize) {
-        let mut s = unsafe { self.image().sem_file.get().read() }[idx];
-        unsafe {
-            libc::sem_wait(&mut s);
+        let s = &mut unsafe { self.image().sem_file.get().read() }[idx];
+        let result = unsafe {
+            libc::sem_wait( s)   
+        };
+        if result < 0 {
+            panic!();
+        }
+    }
+    unsafe fn sem_val(&'a self, idx: usize) -> i32 {
+        let mut sval: i32 = 0;
+        let s = &mut unsafe { self.image().sem_file.get().read() }[idx];
+        let result = unsafe { libc::sem_getvalue(s, &mut sval) };
+        if result < 0 {
+            panic!();
+        }
+        sval
+    }
+    unsafe fn sem_flush(&'a self, idx: usize) {
+        while unsafe { self.sem_val(idx) } > 1 {
+            unsafe { self.sem_wait(idx) };
         }
     }
     unsafe fn array_mut(&'a mut self) -> &'a mut [Self::DTYPE] {

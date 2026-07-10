@@ -12,10 +12,13 @@ fn main() -> Result<(), Error> {
         }
     };
     let mut cnt: usize = 0;
+    unsafe { image.sem_flush(0) };
     loop {
         cnt += 1;
-        unsafe { libc::sem_wait(image._image.sem_log.get().read()) };
-        let x = unsafe { image.array().iter().sum::<f64>() } / unsafe { image.array().len() } as f64;
+        println!("semval: {}", unsafe { image.sem_val(0) });
+        unsafe { image.sem_wait(0) };
+        let x: f64 =
+            unsafe { image.array().iter().sum::<f64>() } / unsafe { image.array().len() } as f64;
         println!("{cnt}: mean(im) = {:0.8}", x);
     }
 }

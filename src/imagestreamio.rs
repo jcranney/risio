@@ -506,6 +506,10 @@ impl<'a> Image<'a> {
         mmap.map.flush()?;
         let map = mmap.map;
         let image = Self::from_mmap_mut(map)?;
+        for s in unsafe { image.sem_file.get().read() } {
+            unsafe { libc::sem_init(s, 1, 0) };
+        }
+
         Ok(image)
     }
 

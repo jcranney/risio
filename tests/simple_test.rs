@@ -9,7 +9,7 @@ fn main() {
     let array = unsafe { image.array() };
     let y = array[0];
     unsafe { image
-        .modify(|x| {
+        .modify(|(_, x)| {
             *x = (*x + 1) % 5;
         })
         .unwrap() };

@@ -5,7 +5,7 @@ fn main() -> Result<(), Error> {
     println!("{}", unsafe { image.array()[0] });
     for x in std::io::stdin().lines().into_iter() {
         match x?.parse() {
-            Ok(v) => unsafe { image.modify(|x| *x = v) }?,
+            Ok(v) => unsafe { image.modify(|(_, x)| *x = v) }?,
             Err(e) => {
                 println!("{}", e);
                 continue;

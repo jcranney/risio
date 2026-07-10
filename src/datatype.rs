@@ -1,26 +1,27 @@
 use crate::bindings::*;
 use crate::error::Error;
 use std::fmt::Debug;
+use std::ops::{Add, Mul, Sub};
 use std::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DataType {
-    U8,  // uint8_t
-    I8,     // int8_t
-    U16,    // uint16_t
-    I16,    // int16_t
-    U32,    // uint32_t
-    I32,    // int32_t
-    U64,    // uint64_t
-    I64,    // int64_t,
-    F32,    // IEEE 754 single-precision binary floating-point format: binary32
-    F64,    // IEEE 754 double-precision binary floating-point format: binary64
-    C64,    // complex_float
-    C128,   // complex double
-    F16,    // half precision floating-point
+    U8,   // uint8_t
+    I8,   // int8_t
+    U16,  // uint16_t
+    I16,  // int16_t
+    U32,  // uint32_t
+    I32,  // int32_t
+    U64,  // uint64_t
+    I64,  // int64_t,
+    F32,  // IEEE 754 single-precision binary floating-point format: binary32
+    F64,  // IEEE 754 double-precision binary floating-point format: binary64
+    C64,  // complex_float
+    C128, // complex double
+    F16,  // half precision floating-point
 }
 
-impl From<DataType> for u8 { 
+impl From<DataType> for u8 {
     fn from(value: DataType) -> Self {
         match value {
             DataType::U8 => 1,
@@ -40,7 +41,7 @@ impl From<DataType> for u8 {
     }
 }
 
-pub trait IsioDataType {
+pub trait IsioDataType: Sized + Send + Sync {
     fn to_datatype() -> DataType;
 
     fn from_bytes<T>(data: &[u8]) -> &[T] {
@@ -108,6 +109,16 @@ impl IsioDataType for f32 {
 impl IsioDataType for f64 {
     fn to_datatype() -> DataType {
         DataType::F64
+    }
+}
+impl IsioDataType for ComplexFloat {
+    fn to_datatype() -> DataType {
+        DataType::C64
+    }
+}
+impl IsioDataType for ComplexDouble {
+    fn to_datatype() -> DataType {
+        DataType::C128
     }
 }
 
@@ -216,6 +227,76 @@ impl ImageType {
             stream_from_other_computer: false,
             stream_for_other_computer: false,
             axis_encoding_code: ZAxisEncodingCode::TemporalCoordinate,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ComplexFloat {
+    re: f32,
+    im: f32,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ComplexDouble {
+    re: f64,
+    im: f64,
+}
+
+impl Add for ComplexFloat {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            re: self.re + rhs.re,
+            im: self.im + rhs.im,
+        }
+    }
+}
+impl Add for ComplexDouble {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            re: self.re + rhs.re,
+            im: self.im + rhs.im,
+        }
+    }
+}
+impl Sub for ComplexFloat {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            re: self.re - rhs.re,
+            im: self.im - rhs.im,
+        }
+    }
+}
+impl Sub for ComplexDouble {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            re: self.re - rhs.re,
+            im: self.im - rhs.im,
+        }
+    }
+}
+impl Mul for ComplexFloat {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        Self {
+            re: self.re * rhs.re + self.im * rhs.im,
+            im: self.re * rhs.im + self.im * rhs.re,
+        }
+    }
+}
+impl Mul for ComplexDouble {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        Self {
+            re: self.re * rhs.re + self.im * rhs.im,
+            im: self.re * rhs.im + self.im * rhs.re,
         }
     }
 }

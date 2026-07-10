@@ -96,32 +96,6 @@ const _: () = {
     ["Offset of field: IMAGE_KEYWORD::comment"]
         [::std::mem::offset_of!(IMAGE_KEYWORD, comment) - 48usize];
 };
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-struct complex_float {
-    re: f32,
-    im: f32,
-}
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of complex_float"][::std::mem::size_of::<complex_float>() - 8usize];
-    ["Alignment of complex_float"][::std::mem::align_of::<complex_float>() - 4usize];
-    ["Offset of field: complex_float::re"][::std::mem::offset_of!(complex_float, re) - 0usize];
-    ["Offset of field: complex_float::im"][::std::mem::offset_of!(complex_float, im) - 4usize];
-};
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-struct complex_double {
-    re: f64,
-    im: f64,
-}
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of complex_double"][::std::mem::size_of::<complex_double>() - 16usize];
-    ["Alignment of complex_double"][::std::mem::align_of::<complex_double>() - 8usize];
-    ["Offset of field: complex_double::re"][::std::mem::offset_of!(complex_double, re) - 0usize];
-    ["Offset of field: complex_double::im"][::std::mem::offset_of!(complex_double, im) - 8usize];
-};
 
 ///
 /// Image metadata

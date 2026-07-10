@@ -16,8 +16,8 @@ fn main() -> Result<(), Error> {
     let mut cnt: usize = 0;
     loop {
         cnt += 1;
-        (unsafe { image.modify(|x| *x = random()) })?;
-        unsafe { image.sem_post(0) };
+        (unsafe { image.modify(|(_, x)| *x = random()) })?;
+        unsafe { image.sem_post_one(0) };
         println!("semval: {}", unsafe { image.sem_val(0) });
         println!("{cnt}: posted!");
         std::thread::sleep(Duration::from_millis(100));

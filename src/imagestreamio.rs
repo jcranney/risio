@@ -9,6 +9,7 @@ use std::slice::from_raw_parts;
 use std::slice::from_raw_parts_mut;
 use std::{path::PathBuf, str::FromStr};
 
+
 const fn round_up_8(x: usize) -> usize {
     (x + 7) & !7
 }
@@ -66,7 +67,8 @@ impl<'a> Image<'a> {
         };
 
         let md_tmp = md.clone();
-
+        DataType::try_from(md_tmp.datatype)?;
+        
         // image array:
         let (chunk, leftover) = leftover.split_at_mut(round_up_8(md_tmp.imdatamemsize as usize));
         let array: &mut [u8] = unsafe {
@@ -241,12 +243,8 @@ impl<'a> Image<'a> {
         // TODO:, I'd like to look into how much of this is replaceable with
         // rust safe code.
         for semindex in 0..NB_SEM {
-            let mut semfile_tmp: SEMFILEDATA = SEMFILEDATA {
+            let semfile_tmp: SEMFILEDATA = SEMFILEDATA {
                 semdata: unsafe { std::mem::zeroed() },
-            };
-            match unsafe { libc::sem_init(&mut semfile_tmp.semdata, 1, SEMAPHORE_INITVAL) } {
-                e if e < 0 => Self::fetch_io_err()?,
-                _ => (),
             };
             sem_read_pid.push(-1);
             sem_write_pid.push(-1);
@@ -257,10 +255,6 @@ impl<'a> Image<'a> {
         }
 
         let semlog: *mut sem_t = &mut unsafe { std::mem::zeroed() };
-        match unsafe { libc::sem_init(semlog, 1, SEMAPHORE_INITVAL) } {
-            e if e < 0 => Self::fetch_io_err()?,
-            _ => (),
-        };
 
         let mut stream_proc_trace: Vec<STREAM_PROC_TRACE> = vec![];
         stream_proc_trace.resize(IMAGE_NB_PROCTRACE as usize, STREAM_PROC_TRACE::new());
@@ -507,9 +501,15 @@ impl<'a> Image<'a> {
         let map = mmap.map;
         let image = Self::from_mmap_mut(map)?;
         for s in unsafe { image.sem_file.get().read() } {
-            unsafe { libc::sem_init(s, 1, 0) };
+            match unsafe { libc::sem_init(s, 1, SEMAPHORE_INITVAL) } {
+                e if e < 0 => Self::fetch_io_err()?,
+                _ => (),
+            }
         }
-
+        match unsafe { libc::sem_init(image.sem_log.get().read(), 1, SEMAPHORE_INITVAL) } {
+            e if e < 0 => Self::fetch_io_err()?,
+            _ => (),
+        };
         Ok(image)
     }
 

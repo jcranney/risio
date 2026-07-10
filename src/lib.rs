@@ -8,118 +8,83 @@ mod bindings;
 pub mod datatype;
 pub mod error;
 pub mod imagestreamio;
+// // #[cfg(feature = "rayon")]
+// use rayon::{self,iter::{IntoParallelRefMutIterator, ParallelIterator, IntoParallelIterator}};
 
-use std::{
-    marker::PhantomData,
-    slice::{from_raw_parts, from_raw_parts_mut},
-};
+use std::marker::PhantomData;
 
-use datatype::*;
 pub use bindings::IMAGE;
 use datatype::*;
 use error::Error;
-use memmap2::MmapMut;
 
-use crate::imagestreamio::{
-    Image,
-    byte_structs::{CBFrameMetadata, ImageKeyword, ImageMetadata, StreamProcTrace, TimeSpec},
-};
+use crate::imagestreamio::{Image, byte_structs::TimeSpec};
 
-/// Contrary to the C library, here we will define a trait that delivers a
-/// similar interface as the ImageStreamIO `IMAGE`, but with some rusty
-/// modifications to (WIP) gaurantee memory safety.
-///
-/// The rationale here for defining a trait is that I plan to try multiple
-/// types of accessors for the shared memory, and potentially to allow users to
-/// write their own while still maintaining compatibility with orthogonal RTC
-/// software.
-pub trait ShmImage<'a> {
-    /// The datatype of the SHM Image
-    type T: IsioDataType;
-
-    /// Read-only access to the underlying shared memory, in the representation
-    /// corresponding to the defined datatype.
-    fn array(&self) -> &[Self::T];
-    /// Read/write access to the underlying shared memory, in the representation
-    /// correspodning to the defined datatype.
-    fn array_mut(&mut self) -> &mut [Self::T];
-
-    /// Read-only access to the Image Metadata in the underlying shared memory
-    fn md(&self) -> &ImageMetadata;
-    /// Read/write access to the Image Metadata in the underlying shared memory
-    fn md_mut(&mut self) -> &mut ImageMetadata;
-
-    /// local name of the image, doesn't need to match the shm file name.
-    fn name(&self) -> &str;
-
-    /// if shared memory, file descriptor
-    fn shmfd(&mut self) -> Option<&mut std::fs::File>;
-
-    /// semaphore for logging
-    fn semlog(&mut self) -> &mut bindings::sem_t;
-
-    /// semaphores for computation
-    fn sem(&mut self) -> &mut [bindings::sem_t];
-
-    /// image keywords
-    fn kw(&mut self) -> &mut [ImageKeyword];
-
-    /// PID of process that read shared memory stream
-    /// Initialized at 0. Otherwise, when process is waiting on semaphore,
-    /// its PID is written in this array. The array can be used to look for
-    /// available semaphores.
-    fn sem_read_pid(&mut self) -> &mut [bindings::pid_t];
-
-    /// PID of processes that are posting the semaphores (JC: I guess there should only be one?)
-    fn sem_write_pid(&mut self) -> &mut [bindings::pid_t];
-
-    /// semaphore control, written by writer to control semaphore behavior.
-    /// See SEMAPHORE_CONTROL_XXX defines for details
-    fn sem_ctrl(&mut self) -> &mut u32;
-
-    /// semaphore status, written by readers to report back to stream what is their current status.
-    /// See SEMAPHORE_STATUS_XXX defines for details
-    fn sem_status(&mut self) -> &mut u32;
-
-    // array to keep track of stream history/depedencies
-    fn stream_proc_trace(&mut self) -> &mut [StreamProcTrace];
-    /// flag for each slice if needed (depends on imagetype)
-    fn flag_array(&mut self) -> &mut u64;
-    /// For circular buffer: counter array for circular buffer, copy of cnt0 onto slice index
-    fn cnt_array(&mut self) -> &mut u64;
-    /// For each slice index: time at which data was acquires/created.
-    /// This time CAN be copied from input to output
-    fn a_time_array(&mut self) -> &mut [TimeSpec];
-    /// For each slice index: time at which data was written.
-    /// This time CAN be copied from input to output
-    fn write_time_array(&mut self) -> &mut [TimeSpec];
-
-    // Circular Buffer (CB) option
-    // if CBsize>0, recent frames are memcpied in circular buffer
-    // recent frames may be accessed in small CB for logging.
-    /// array of CB metadata
-    fn circ_buff_md(&mut self) -> &mut [CBFrameMetadata];
-    /// data storage for circ buffer
-    fn cb_im_data(&self) -> &[Self::T];
-    /// mutabel data storage for circ buffer
-    fn cb_im_data_mut(&mut self) -> &mut [Self::T];
-}
-
-/// A type that implements Accessor will contain a method that retrieves a
+/// A type that implements Accessor will contain a method that interacts with a
 /// reference to an ImageStreamIO IMAGE,
 pub trait Accessor<'a> {
-    type T: IsioDataType;
+    type DTYPE: IsioDataType;
     fn name(&self) -> &str;
-    fn image(&self) -> &Image<'a>;
-    fn image_mut(&mut self) -> &mut Image<'a>;
-    fn array(&'a self) -> &'a [Self::T] {
-        let bytes: &[Self::T] = Self::T::from_bytes(self.image().array);
-        bytes
+    fn image(&'a self) -> &'a Image<'a>;
+    // fn image_mut(&'a mut self) -> &'a mut Image<'a>;
+    unsafe fn array(&'a self) -> &'a [Self::DTYPE] {
+        Self::DTYPE::from_bytes(unsafe { self.image().array.get().read() })
     }
-    fn array_mut(&'a mut self) -> &'a mut [Self::T] {
-        let bytes: &mut [Self::T] = Self::T::from_bytes_mut(self.image_mut().array);
-        bytes
+    unsafe fn modify<F>(&'a self, f: F) -> Result<(), Error>
+    where
+        F: FnMut(&mut Self::DTYPE),
+    {
+        if unsafe { self.image().md.get().read().write } != 0 {
+            return Err(Error::ImageIsBeingWritten(self.name().to_string()));
+        } else {
+            unsafe {
+                self.image().md.get().read().write = 1;
+            }
+        }
+        let array: &mut [Self::DTYPE] =
+            Self::DTYPE::from_bytes_mut(unsafe { self.image().array.get().read() });
+        array.iter_mut().for_each(f);
+        unsafe { self.image().md.get().read().write = 0 };
+        Ok(())
     }
+    // // #[cfg(feature = "rayon")]
+    // unsafe fn par_modify<F>(&'a self, f: F) -> Result<(), Error>
+    // where
+    //     F: FnMut(&mut Self::DTYPE),
+    // {
+    //     if unsafe { self.image().md.get().read().write } != 0 {
+    //         return Err(Error::ImageIsBeingWritten(self.name().to_string()));
+    //     } else {
+    //         unsafe {
+    //             self.image().md.get().read().write = 1;
+    //         }
+    //     }
+    //     let array: &mut [Self::DTYPE] =
+    //         Self::DTYPE::from_bytes_mut(unsafe { self.image().array.get().read() });
+    //     array.par_iter_mut().for_each(f);
+    //     unsafe { self.image().md.get().read().write = 0 };
+    //     Ok(())
+    // }
+    unsafe fn sem_post(&'a self, idx: usize) {
+        let mut s = unsafe { self.image().sem_file.get().read() }[idx];
+        unsafe {
+            libc::sem_post(&mut s);
+        }
+    }
+    unsafe fn sem_wait(&'a self, idx: usize) {
+        let mut s = unsafe { self.image().sem_file.get().read() }[idx];
+        unsafe {
+            libc::sem_wait(&mut s);
+        }
+    }
+    unsafe fn array_mut(&'a mut self) -> &'a mut [Self::DTYPE] {
+        Self::DTYPE::from_bytes_mut(unsafe { self.image().array.get().read() })
+    }
+}
+
+pub enum SemIdx {
+    One(usize),
+    Some(Vec<usize>),
+    All,
 }
 
 pub struct RawImage<'a, T: IsioDataType> {
@@ -141,25 +106,25 @@ impl<'a, T: IsioDataType> RawImage<'a, T> {
             ImageType::image(),
             0,
         )?;
-        let found_dt = unsafe { image.md.datatype };
+        let found_dt = unsafe { image.md.get().read().datatype };
         if Into::<u8>::into(T::to_datatype()) != found_dt {
-            return Err(Error::MismatchDataType {
+            Err(Error::MismatchDataType {
                 expected: T::to_datatype(),
                 found: DataType::try_from(found_dt)?,
-            }
-            .into());
+            })
+        } else {
+            Ok(Self {
+                _im_name: name.to_string(),
+                _image: image,
+                // _mmap: mmap,
+                _phantom_data: PhantomData::<T>,
+            })
         }
-        Ok(Self {
-            _im_name: name.to_string(),
-            _image: image,
-            // _mmap: mmap,
-            _phantom_data: PhantomData::<T>,
-        })
     }
 
     /// Open an image with a specified name. Returns an error if the image
     /// doesnt exist, or if it exists with the wrong datatype.
-    pub fn open(name: &str) -> Result<Self, Error> {
+    pub fn open(name: &'a str) -> Result<Self, Error> {
         let image = Image::open_image(name)?;
         Ok(Self {
             _im_name: name.to_string(),
@@ -171,17 +136,17 @@ impl<'a, T: IsioDataType> RawImage<'a, T> {
 }
 
 impl<'a, T: IsioDataType> Accessor<'a> for RawImage<'a, T> {
-    type T = T;
-    
+    type DTYPE = T;
+
     fn name(&self) -> &str {
         &self._im_name
     }
-    
-    fn image(&self) -> &Image<'a> {
+
+    fn image(&'a self) -> &'a Image<'a> {
         &self._image
     }
-    
-    fn image_mut(&mut self) -> &mut Image<'a> {
-        &mut self._image
-    }
+
+    // fn image_mut(&'a mut self) -> &'a mut Image<'a> {
+    //     &mut self._image
+    // }
 }

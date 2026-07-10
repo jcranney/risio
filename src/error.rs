@@ -23,7 +23,9 @@ pub enum Error {
     #[error("std::io error: {0}")]
     StdIoError(std::io::Error),
     #[error("impossible error, you must feel very special! {0}")]
-    Impossible(Infallible)
+    Impossible(Infallible),
+    #[error("image is being written elsewhere - cannot write. image name: {0}")]
+    ImageIsBeingWritten(String),
 }
 
 impl From<std::io::Error> for Error {

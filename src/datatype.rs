@@ -20,9 +20,9 @@ pub enum DataType {
     F16,    // half precision floating-point
 }
 
-impl Into<u8> for DataType {
-    fn into(self) -> u8 {
-        match self {
+impl From<DataType> for u8 { 
+    fn from(value: DataType) -> Self {
+        match value {
             DataType::U8 => 1,
             DataType::I8 => 2,
             DataType::U16 => 3,

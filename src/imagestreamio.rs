@@ -4,7 +4,7 @@ use crate::datatype::*;
 use crate::error::Error;
 use crate::imagestreamio::byte_structs::*;
 use memmap2::MmapMut;
-use std::ffi::c_void;
+use std::cell::UnsafeCell;
 use std::slice::from_raw_parts;
 use std::slice::from_raw_parts_mut;
 use std::{path::PathBuf, str::FromStr};
@@ -49,12 +49,11 @@ impl<'a> Image<'a> {
     //     todo!()
     // }
 
-    fn from_mmap_mut(mmap: &mut MmapMut) -> Result<Self, Error> {
+    fn from_mmap_mut(mut mmap: MmapMut) -> Result<Self, Error> {
         // so now we want to populate the data in a new IMAGE from mmap.
         // I guess either the mmap data is contiguous, or the IMAGE data is
         // contiguous, not both. So perhaps the IMAGE data is all simply cloned
         // from the SHM, including pointers etc.s
-        todo!();
         let memsize = mmap.len();
 
         // first up is image metadata.
@@ -70,8 +69,12 @@ impl<'a> Image<'a> {
 
         // image array:
         let (chunk, leftover) = leftover.split_at_mut(round_up_8(md_tmp.imdatamemsize as usize));
-        let array = chunk;
-
+        let array: &mut [u8] = unsafe {
+            from_raw_parts_mut(
+                chunk.as_mut_ptr(),
+                round_up_8(md_tmp.imdatamemsize as usize),
+            )
+        };
         let (chunk, leftover) = leftover.split_at_mut(round_up_8(
             size_of::<ImageKeyword>() * md_tmp.nb_kw as usize,
         ));
@@ -79,12 +82,13 @@ impl<'a> Image<'a> {
             unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.nb_kw as usize) };
 
         let (chunk, leftover) =
-            leftover.split_at_mut(round_up_8(size_of::<SemFileData>() * md_tmp.sem as usize));
-        let semfile: &mut [SemFileData] =
+            leftover.split_at_mut(round_up_8(size_of::<libc::sem_t>() * md_tmp.sem as usize));
+        let sem_file: &mut [libc::sem_t] =
             unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
 
-        let (chunk, leftover) = leftover.split_at_mut(round_up_8(size_of::<Sem>()));
-        let semlog: &mut Sem = { unsafe { chunk.as_mut_ptr().cast::<Sem>().as_mut_unchecked() } };
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(size_of::<libc::sem_t>()));
+        let sem_log: &mut libc::sem_t =
+            { unsafe { chunk.as_mut_ptr().cast::<libc::sem_t>().as_mut_unchecked() } };
 
         let (chunk, leftover) =
             leftover.split_at_mut(round_up_8(size_of::<i32>() * md_tmp.sem as usize));
@@ -114,17 +118,17 @@ impl<'a> Image<'a> {
 
         let (chunk, leftover) =
             leftover.split_at_mut(round_up_8(size_of::<TimeSpec>() * md_tmp.size[2] as usize));
-        let atimearray: &mut [TimeSpec] =
+        let a_time_array: &mut [TimeSpec] =
             unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.size[2] as usize) };
 
         let (chunk, leftover) =
             leftover.split_at_mut(round_up_8(size_of::<TimeSpec>() * md_tmp.size[2] as usize));
-        let writetimearray: &mut [TimeSpec] =
+        let write_time_array: &mut [TimeSpec] =
             unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.size[2] as usize) };
 
         let (chunk, leftover) =
             leftover.split_at_mut(round_up_8(size_of::<u64>() * md_tmp.size[2] as usize));
-        let cntarray: &mut [u64] =
+        let cnt_array: &mut [u64] =
             unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.size[2] as usize) };
 
         let (chunk, leftover) = leftover.split_at_mut(round_up_8(
@@ -136,40 +140,40 @@ impl<'a> Image<'a> {
         let (chunk, leftover) = leftover.split_at_mut(round_up_8(
             md_tmp.imdatamemsize as usize * md_tmp.cb_size as usize,
         ));
-        let cb_imdata: &mut [u8] = chunk;
-
-        // let semptr: &mut [&mut Sem] = &mut semfile.iter_mut().map(|s| {
-        //     let SemFileData { semdata } = s;
-        //     semdata
-        // }).collect();
+        let cb_im_data: &mut [u8] = unsafe {
+            from_raw_parts_mut(
+                chunk.as_mut_ptr(),
+                round_up_8(md_tmp.imdatamemsize as usize * md_tmp.cb_size as usize),
+            )
+        };
 
         // should be nothing left in mmap:
         assert_eq!(leftover.len(), 0);
 
-        let image = Self {
+        let image: Image<'a> = Self {
             name: md_tmp.name,
             used: 1,
-            createcnt: 1,
-            shmfd: -1,
-            memsize: memsize as u64,
-            semlog,
-            md,
-            array,
-            // semptr,
-            kw,
-            semfile,
-            sem_read_pid,
-            sem_write_pid,
-            semctrl: sem_ctrl,
-            semstatus: sem_status,
-            streamproctrace: stream_proc_trace,
+            create_cnt: 1,
+            shm_fd: -1,
+            mem_size: memsize as u64,
+            sem_log: UnsafeCell::new(sem_log),
+            md: UnsafeCell::new(md),
+            array: UnsafeCell::new(array),
+            // // semptr,
+            kw: UnsafeCell::new(kw),
+            sem_file: UnsafeCell::new(sem_file),
+            sem_read_pid: UnsafeCell::new(sem_read_pid),
+            sem_write_pid: UnsafeCell::new(sem_write_pid),
+            sem_ctrl: UnsafeCell::new(sem_ctrl),
+            sem_status: UnsafeCell::new(sem_status),
+            stream_proc_trace: UnsafeCell::new(stream_proc_trace),
             // flagarray: [].as_mut(),
-            cntarray,
-            atimearray,
-            writetimearray,
-            circ_buff_md,
-            cb_imdata,
-            mmap: None,
+            cnt_array: UnsafeCell::new(cnt_array),
+            a_time_array: UnsafeCell::new(a_time_array),
+            write_time_array: UnsafeCell::new(write_time_array),
+            circ_buff_md: UnsafeCell::new(circ_buff_md),
+            cb_im_data: UnsafeCell::new(cb_im_data),
+            mmap,
         };
 
         Ok(image)
@@ -193,8 +197,7 @@ impl<'a> Image<'a> {
         if shape.iter().any(|s| s == &0) {
             return Err(Error::InvalidShapeArray {
                 shape: shape.to_vec(),
-            }
-            .into());
+            });
         }
 
         // create a new shape3 with constant size 3 (like ISIO format)
@@ -277,8 +280,20 @@ impl<'a> Image<'a> {
         //         axis_encoding_code: ZAxisEncodingCode::TemporalCoordinate,
         //         ..
         //     } => {
-        atimearray.resize(len_timedim, timespec{ tv_sec: 0, tv_nsec: 0 });
-        writetimearray.resize(len_timedim, timespec{ tv_sec: 0, tv_nsec: 0 });
+        atimearray.resize(
+            len_timedim,
+            timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+        );
+        writetimearray.resize(
+            len_timedim,
+            timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+        );
         cntarray.resize(len_timedim, 0);
         //     }
         //     _ => (),
@@ -315,9 +330,15 @@ impl<'a> Image<'a> {
         //     _ => unreachable!(),
         // };
 
-        let mut last_access_time = libc::timespec{ tv_sec: 0, tv_nsec: 0 };
+        let mut last_access_time = libc::timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
         unsafe { libc::clock_gettime(CLOCK_TAI as i32, &mut last_access_time) };
-        let mut creation_time = libc::timespec{ tv_sec: 0, tv_nsec: 0 };
+        let mut creation_time = libc::timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
         unsafe { libc::clock_gettime(CLOCK_TAI as i32, &mut creation_time) };
 
         // let flagarray: [u64; 10] = [0; 10]; // TODO: This isn't initialised in ISIO, but worse
@@ -334,8 +355,14 @@ impl<'a> Image<'a> {
             imagetype: imagetype.into(),
             creationtime: creation_time,
             lastaccesstime: last_access_time,
-            atime: timespec{ tv_sec: 0, tv_nsec: 0 },
-            writetime: timespec{ tv_sec: 0, tv_nsec: 0 },
+            atime: timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            writetime: timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
             creatorPID: std::process::id() as i32,
             ownerPID: 0,
             shared: 1,
@@ -477,20 +504,21 @@ impl<'a> Image<'a> {
             "unexpected data size, something is wrong."
         );
         mmap.map.flush()?;
-        let mut map = mmap.map;
-        let image = Self::from_mmap_mut(&mut map)?;
+        let map = mmap.map;
+        let image = Self::from_mmap_mut(map)?;
         Ok(image)
     }
 
-    pub fn open_image(name: &str) -> Result<Self, Error> {
+    pub fn open_image(name: &'a str) -> Result<Self, Error> {
         let file = std::fs::File::options()
             .read(true)
             .write(true)
             .open(Self::sm_pname(name)?)?;
 
-        let mut mmap = unsafe { MmapMut::map_mut(&file) }?;
+        let mmap = unsafe { MmapMut::map_mut(&file) }?;
 
-        let image = Self::from_mmap_mut(&mut mmap)?;
+        let image = Self::from_mmap_mut(mmap)?;
+        // image.mmap = Some(mmap);
         Ok(image)
     }
 }
@@ -627,19 +655,6 @@ pub mod byte_structs {
         pub imdatamemsize: u64,
         pub cuda_mem_handle: [std::os::raw::c_char; 64usize],
     }
-
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub union Sem {
-        pub __size: [std::os::raw::c_char; 32usize],
-        pub __align: std::os::raw::c_long,
-    }
-
-    #[repr(C)]
-    #[derive(Copy, Clone)]
-    pub struct SemFileData {
-        pub semdata: Sem,
-    }
 }
 
 /// This type has the same objects as the equivalent IMAGE struct in ISIO,
@@ -665,58 +680,57 @@ pub struct Image<'a> {
     /// The active images can be listed by looking for IMAGE[i].used==1 entries.
     pub used: u8,
     /// increments when image is (re)-created
-    pub createcnt: i64,
+    pub create_cnt: i64,
     /// if shared memory, file descriptor
-    pub shmfd: i32,
+    pub shm_fd: i32,
     /// total size in memory if shared
-    pub memsize: u64,
+    pub mem_size: u64,
     /// pointer to semaphore for logging  (8 bytes on 64-bit system)
-    pub semlog: &'a mut Sem,
+    pub sem_log: UnsafeCell<&'a mut libc::sem_t>,
     /// pointer to image metadata
-    pub md: &'a mut ImageMetadata,
+    pub md: UnsafeCell<&'a mut ImageMetadata>,
     /// pointer to data array
-    pub array: &'a mut [u8],
+    pub array: UnsafeCell<&'a mut [u8]>,
 
-    // TODO:
-    // /// array of pointers to semaphores   (each 8 bytes on 64-bit system)
-    // pub semptr: &'a mut [&'a mut Sem],
+    /// array of pointers to semaphores   (each 8 bytes on 64-bit system)
+    // pub semptr: &'a mut [&'a mut libc::sem_t],
     /// array of image Keywords
-    pub kw: &'a mut [ImageKeyword],
+    pub kw: UnsafeCell<&'a mut [ImageKeyword]>,
     /// array of semfiles
-    pub semfile: &'a mut [SemFileData],
+    pub sem_file: UnsafeCell<&'a mut [libc::sem_t]>,
     /// PID of process that read shared memory stream
     /// Initialized at 0. Otherwise, when process is waiting on semaphore, its PID is written in this array
     /// The array can be used to look for available semaphores
-    pub sem_read_pid: &'a mut [std::os::raw::c_int],
+    pub sem_read_pid: UnsafeCell<&'a mut [std::os::raw::c_int]>,
     /// PID of processes that are posting the semaphores (JC: I guess there should usually only be one?)
-    pub sem_write_pid: &'a mut [std::os::raw::c_int],
+    pub sem_write_pid: UnsafeCell<&'a mut [std::os::raw::c_int]>,
     /// semaphore control, written by writer to control semaphore behavior.
     /// See SEMAPHORE_CONTROL_XXX defines for details
-    pub semctrl: &'a mut [u32],
+    pub sem_ctrl: UnsafeCell<&'a mut [u32]>,
     /// semaphore status, written by readers to report back to stream what is their current status.
     /// See SEMAPHORE_STATUS_XXX defines for details
-    pub semstatus: &'a mut [u32],
+    pub sem_status: UnsafeCell<&'a mut [u32]>,
     // array to keep track of stream history/depedencies
-    pub streamproctrace: &'a mut [StreamProcTrace],
+    pub stream_proc_trace: UnsafeCell<&'a mut [StreamProcTrace]>,
     // /// flag for each slice if needed (depends on imagetype)
     // pub flagarray: &'a mut [u64],
     /// For circular buffer: counter array for circular buffer, copy of cnt0 onto slice index
-    pub cntarray: &'a mut [u64],
+    pub cnt_array: UnsafeCell<&'a mut [u64]>,
     /// For each slice index: time at which data was acquires/created.
     /// This time CAN be copied from input to output
-    pub atimearray: &'a mut [TimeSpec],
+    pub a_time_array: UnsafeCell<&'a mut [TimeSpec]>,
     /// For each slice index: time at which data was written.
     /// This time CAN be copied from input to output
-    pub writetimearray: &'a mut [TimeSpec],
+    pub write_time_array: UnsafeCell<&'a mut [TimeSpec]>,
 
     /// Circular Buffer (CB) option
     /// if CBsize>0, recent frames are memcpied in circular buffer
     /// recent frames may be accessed in small CB for logging.
     ///
     /// array of CB metadata
-    pub circ_buff_md: &'a mut [CBFrameMetadata],
+    pub circ_buff_md: UnsafeCell<&'a mut [CBFrameMetadata]>,
     /// data storage for circ buffer
-    pub cb_imdata: &'a mut [u8],
+    pub cb_im_data: UnsafeCell<&'a mut [u8]>,
     /// memory mapping
-    pub mmap: Option<MmapMut>,
+    pub mmap: MmapMut,
 }

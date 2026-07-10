@@ -14,8 +14,9 @@ cmake = "0.1.58"
 [dependencies]
 libc = "0.2.186"
 memmap2 = "0.9.11"
-rand = "0.10.2"
 thiserror = "2.0.18"
+rayon = { version = "1.12.0", optional = true }
+
 
 [lib]
 name = "risio"
@@ -23,9 +24,12 @@ crate-type = ["rlib"]
 
 [dev-dependencies]
 criterion = { version = "0.8.2", features = ["html_reports"] }
-rayon = "1.12.0"
+rand = "0.10.2"
 
 [[bench]]
 name = "bench"
 harness = false
 
+[features]
+default = ["rayon"]
+rayon = ["dep:rayon"]

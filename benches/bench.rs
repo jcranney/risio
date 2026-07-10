@@ -1,41 +1,64 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use std::hint::black_box;
-use rayon::{self, iter::{IntoParallelRefMutIterator, ParallelIterator}};
+use rayon::{
+    self,
+    iter::{IntoParallelRefMutIterator, ParallelIterator},
+};
+use std::time::Instant;
 
 use risio::{Accessor, RawImage};
 
 const IMNAME: &str = "benchy";
 const IMSHAPE: &[usize; 2] = &[1000, 1200];
 
-fn par_modify_image(image: &mut RawImage<f64>) {
-    // image.array_mut().par_iter_mut().for_each(|x| {
-    //     *x = (*x + 42.0) % 41.0;
-    // });
+fn par_modify_image(array: &mut [f64]) {
+    array.par_iter_mut().for_each(|x| {
+        *x = (*x + 42.0) % 41.0;
+    });
 }
 
-fn modify_image(image: &mut RawImage<f64>) {
-    // image.array_mut().iter_mut().for_each(|x| {
-    //     *x = (*x + 42.0) % 41.0;
-    // });
+fn modify_image<'a>(array: &mut [f64]) {
+    array.iter_mut().for_each(|x| {
+        *x = (*x + 42.0) % 41.0;
+    });
 }
 
 fn bench_modify_image(c: &mut Criterion) {
     let mut group = c.benchmark_group("modify image");
 
-    // open the image
-    let mut image: RawImage<f64> = match RawImage::open(IMNAME) {
-        Ok(img) => img,
-        Err(_) => {
-            // couldn't open it, we can try to create it
-            RawImage::create_new(IMNAME, IMSHAPE).unwrap()
-        }
-    };
-
-    group.bench_function("serial", |b| {
-        b.iter(|| modify_image(black_box(&mut image)))
+    group.bench_function("serial", move |b| {
+        b.iter_custom(|iters| {
+            let mut image = match RawImage::<f64>::open(IMNAME) {
+                Ok(img) => img,
+                Err(_) => {
+                    // couldn't open it, we can try to create it
+                    RawImage::create_new(IMNAME, IMSHAPE).unwrap()
+                }
+            };
+            let array = unsafe { image.array_mut() };
+            let start = Instant::now();
+            for _ in 0..iters {
+                modify_image(array);
+            }
+            start.elapsed()
+        })
     });
-    group.bench_function("par", |b| {
-        b.iter(|| par_modify_image(black_box(&mut image)))
+
+    group.bench_function("rayon", move |b| {
+        b.iter_custom(|iters| {
+            let mut image = match RawImage::<f64>::open(IMNAME) {
+                Ok(img) => img,
+                Err(_) => {
+                    // couldn't open it, we can try to create it
+                    RawImage::create_new(IMNAME, IMSHAPE).unwrap()
+                }
+            };
+            let array = unsafe { image.array_mut() };
+            let start = Instant::now();
+            for _ in 0..iters {
+                par_modify_image(array);
+            }
+            start.elapsed()
+        })
     });
 }
 

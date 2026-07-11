@@ -9,7 +9,6 @@ use std::slice::from_raw_parts;
 use std::slice::from_raw_parts_mut;
 use std::{path::PathBuf, str::FromStr};
 
-
 const fn round_up_8(x: usize) -> usize {
     (x + 7) & !7
 }
@@ -68,7 +67,7 @@ impl<'a> Image<'a> {
 
         let md_tmp = md.clone();
         DataType::try_from(md_tmp.datatype)?;
-        
+
         // image array:
         let (chunk, leftover) = leftover.split_at_mut(round_up_8(md_tmp.imdatamemsize as usize));
         let array: &mut [u8] = unsafe {
@@ -410,75 +409,88 @@ impl<'a> Image<'a> {
         let mut mmap = MapOwner::new(file)?;
 
         mmap.get_next_mut_ptr(round_up_8(size_of::<IMAGE_METADATA>()))?
-            .copy_from_slice(unsafe { from_raw_parts(md.cast(), size_of::<IMAGE_METADATA>()) });
+            .copy_from_slice(unsafe {
+                from_raw_parts(md.cast(), round_up_8(size_of::<IMAGE_METADATA>()))
+            });
 
         mmap.get_next_mut_ptr(round_up_8(imdatamemsize))?
-            .copy_from_slice(unsafe { from_raw_parts(array_raw.UI8, imdatamemsize) });
+            .copy_from_slice(unsafe { from_raw_parts(array_raw.UI8, round_up_8(imdatamemsize)) });
 
         mmap.get_next_mut_ptr(round_up_8(size_of::<IMAGE_KEYWORD>() * nb_kw))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts(kw.as_ptr().cast(), nb_kw * size_of::<IMAGE_KEYWORD>())
+                core::slice::from_raw_parts(
+                    kw.as_ptr().cast(),
+                    round_up_8(size_of::<IMAGE_KEYWORD>() * nb_kw),
+                )
             });
 
         mmap.get_next_mut_ptr(round_up_8(size_of::<SEMFILEDATA>() * NB_SEM))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     semfile.as_ptr().cast(),
-                    NB_SEM * size_of::<SEMFILEDATA>(),
+                    round_up_8(size_of::<SEMFILEDATA>() * NB_SEM),
                 )
             });
 
         mmap.get_next_mut_ptr(round_up_8(size_of::<sem_t>()))?
-            .copy_from_slice(unsafe { from_raw_parts(semlog.cast(), size_of::<sem_t>()) });
+            .copy_from_slice(unsafe {
+                from_raw_parts(semlog.cast(), round_up_8(size_of::<sem_t>()))
+            });
 
         mmap.get_next_mut_ptr(round_up_8(size_of::<i32>() * NB_SEM))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts(sem_read_pid.as_ptr().cast(), size_of::<i32>() * NB_SEM)
+                core::slice::from_raw_parts(
+                    sem_read_pid.as_ptr().cast(),
+                    round_up_8(size_of::<i32>() * NB_SEM),
+                )
             });
         mmap.get_next_mut_ptr(round_up_8(size_of::<i32>() * NB_SEM))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     sem_write_pid.as_ptr().cast(),
-                    size_of::<i32>() * NB_SEM,
+                    round_up_8(size_of::<i32>() * NB_SEM),
                 )
             });
         mmap.get_next_mut_ptr(round_up_8(size_of::<u32>() * NB_SEM))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts(sem_ctrl.as_ptr().cast(), size_of::<u32>() * NB_SEM)
+                core::slice::from_raw_parts(
+                    sem_ctrl.as_ptr().cast(),
+                    round_up_8(size_of::<u32>() * NB_SEM),
+                )
             });
         mmap.get_next_mut_ptr(round_up_8(size_of::<u32>() * NB_SEM))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     sem_write_pid.as_ptr().cast(),
-                    size_of::<u32>() * NB_SEM,
+                    round_up_8(size_of::<u32>() * NB_SEM),
                 )
             });
         mmap.get_next_mut_ptr(round_up_8(size_of::<STREAM_PROC_TRACE>() * nbproctrace))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     stream_proc_trace.as_ptr().cast(),
-                    size_of::<STREAM_PROC_TRACE>() * nbproctrace,
+                    round_up_8(size_of::<STREAM_PROC_TRACE>() * nbproctrace),
                 )
             });
         mmap.get_next_mut_ptr(round_up_8(size_of::<timespec>() * len_timedim))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     atimearray.as_ptr().cast(),
-                    size_of::<timespec>() * len_timedim,
+                    round_up_8(size_of::<timespec>() * len_timedim),
                 )
             });
         mmap.get_next_mut_ptr(round_up_8(size_of::<timespec>() * len_timedim))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     writetimearray.as_ptr().cast(),
-                    size_of::<timespec>() * len_timedim,
+                    round_up_8(size_of::<timespec>() * len_timedim),
                 )
             });
         mmap.get_next_mut_ptr(round_up_8(size_of::<u64>() * len_timedim))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     cntarray.as_ptr().cast(),
-                    size_of::<u64>() * len_timedim,
+                    round_up_8(size_of::<u64>() * len_timedim),
                 )
             });
 
@@ -486,12 +498,12 @@ impl<'a> Image<'a> {
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     circ_buff_md.as_ptr().cast(),
-                    size_of::<CBFRAMEMD>() * cb_size,
+                    round_up_8(size_of::<CBFRAMEMD>() * cb_size),
                 )
             });
         mmap.get_next_mut_ptr(round_up_8(imdatamemsize * cb_size))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts(cb_imdata.as_ptr().cast(), imdatamemsize * cb_size)
+                core::slice::from_raw_parts(cb_imdata.as_ptr().cast(), round_up_8(imdatamemsize * cb_size))
             });
         assert_eq!(
             image_memsize, mmap.idx,

@@ -234,14 +234,14 @@ impl ImageType {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ComplexFloat {
-    re: f32,
-    im: f32,
+    pub re: f32,
+    pub im: f32,
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ComplexDouble {
-    re: f64,
-    im: f64,
+    pub re: f64,
+    pub im: f64,
 }
 
 impl Add for ComplexFloat {

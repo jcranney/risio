@@ -52,7 +52,7 @@ pub trait Accessor<'a> {
             .iter()
             .map_while(|x| match x {
                 0 => None,
-                x => char::try_from(*x as u8).ok(),
+                x => Some(*x as u8 as char),
             })
             .collect()
     }

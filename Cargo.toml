@@ -6,11 +6,6 @@ description = "Rust wrapper for ImageStreamIO library"
 license = "Unlicense"
 repository = "https://github.com/jcranney/risio"
 
-
-[build-dependencies]
-cmake = "0.1.58"
-# bindgen = "0.72.1"
-
 [dependencies]
 libc = "0.2.186"
 memmap2 = "0.9.11"

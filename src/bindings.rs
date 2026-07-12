@@ -358,6 +358,7 @@ const _: () = {
 /// IMPORTANT: memory allocations for dynamically allocated arrays need to be
 /// included in the memory size computation in ImageStreamIO_createIm_gpu
 #[repr(C)]
+#[allow(clippy::upper_case_acronyms)]
 #[derive()]
 pub struct IMAGE {
     /// local name (can be different from name in shared memory)

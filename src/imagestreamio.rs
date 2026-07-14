@@ -525,7 +525,7 @@ impl<'a> Image<'a> {
         Ok(image)
     }
 
-    pub fn open_image(name: &'a str) -> Result<Self, Error> {
+    pub fn open_image(name: &str) -> Result<Self, Error> {
         let file = std::fs::File::options()
             .read(true)
             .write(true)

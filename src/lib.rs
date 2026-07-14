@@ -36,17 +36,18 @@ pub trait Accessor<'a> {
     /// returns an Image object, which contains many `UnsafeCell`s that contain
     /// mutable references pointing to shared memory.
     unsafe fn image(&self) -> &Image<'a>;
+    unsafe fn image_mut(&mut self) -> &mut Image<'a>;
 
     /// Returns the memory mapped image data as an immutable slice. The elements
     /// of this slice are directly mapped to the bytes in the shm image. This
     /// is still unsafe, since it is readily subject to race conditions from
     /// other processes.
-    unsafe fn array(&self) -> &'a [Self::DTYPE] {
-        Self::DTYPE::from_bytes(unsafe { self.image().array.get().read() })
+    unsafe fn array(&'a self) -> &'a [Self::DTYPE] {
+        Self::DTYPE::from_bytes(unsafe { self.image().array })
     }
 
     /// formatted name from Image MetaData
-    fn name(&self) -> String {
+    unsafe fn name(&self) -> String {
         self.metadata()
             .name
             .iter()
@@ -60,21 +61,21 @@ pub trait Accessor<'a> {
     /// Modify shared memory data in-place by passing a closure that mutates
     /// the existing element, possibly using the index of that element in it's
     /// computation which is the first argument of the closure.
-    unsafe fn modify<F>(&self, f: F) -> Result<(), Error>
+    unsafe fn modify<F>(&mut self, f: F) -> Result<(), Error>
     where
         F: Fn((usize, &mut Self::DTYPE)),
     {
-        if unsafe { self.image().md.get().read().write } != 0 {
-            return Err(Error::ImageIsBeingWritten(self.name().to_string()));
+        if { unsafe { self.image_mut().md.write } } != 0 {
+            return Err(Error::ImageIsBeingWritten(unsafe {
+                self.name().to_string()
+            }));
         } else {
-            unsafe {
-                self.image().md.get().read().write = 1;
-            }
+            unsafe { self.image_mut().md.write = 1 };
         }
         let array: &mut [Self::DTYPE] =
-            Self::DTYPE::from_bytes_mut(unsafe { self.image().array.get().read() });
+            Self::DTYPE::from_bytes_mut(unsafe { self.image_mut().array });
         array.iter_mut().enumerate().for_each(f);
-        unsafe { self.image().md.get().read().write = 0 };
+        unsafe { self.image_mut().md.write = 0 };
         Ok(())
     }
 
@@ -82,21 +83,23 @@ pub trait Accessor<'a> {
     /// Modify shared memory data in-place by passing a closure that mutates
     /// the existing element, possibly using the index of that element in it's
     /// computation which is the first argument of the closure.
-    unsafe fn par_modify<F>(&self, f: F) -> Result<(), Error>
+    unsafe fn par_modify<F>(&mut self, f: F) -> Result<(), Error>
     where
         F: Fn((usize, &mut Self::DTYPE)) + Sync + Send,
     {
-        if unsafe { self.image().md.get().read().write } != 0 {
-            return Err(Error::ImageIsBeingWritten(self.name().to_string()));
+        if unsafe { self.image_mut().md.write } != 0 {
+            return Err(Error::ImageIsBeingWritten(unsafe {
+                self.name().to_string()
+            }));
         } else {
             unsafe {
-                self.image().md.get().read().write = 1;
+                self.image_mut().md.write = 1;
             }
         }
         let array: &mut [Self::DTYPE] =
-            Self::DTYPE::from_bytes_mut(unsafe { self.image().array.get().read() });
+            Self::DTYPE::from_bytes_mut(unsafe { self.image_mut().array });
         array.par_iter_mut().enumerate().for_each(f);
-        unsafe { self.image().md.get().read().write = 0 };
+        unsafe { self.image_mut().md.write = 0 };
         Ok(())
     }
 
@@ -108,17 +111,17 @@ pub trait Accessor<'a> {
     ///
     /// This function posts to all semaphores in this shm image, which is a
     /// common pattern for "single producer, multiple consumer" shared memory.
-    unsafe fn sem_post_all(&self) {
-        for s in unsafe { self.image().sem_file.get().read() }.iter_mut() {
-            unsafe { Self::_sem_post(s) };
+    unsafe fn sem_post_all(&mut self) {
+        for i in 0..self.metadata().sem {
+            unsafe { self.sem_post_one(i as usize) };
         }
     }
     /// Post to a single semaphores in this shm image, which can be useful in
     /// "single producer, single consumer" configurations, or when many
     /// processes modify the image data in-place, and the semaphores are used
     /// to establish a "sequence" of work.
-    unsafe fn sem_post_one(&self, idx: usize) {
-        let s = &mut unsafe { self.image().sem_file.get().read() }[idx];
+    unsafe fn sem_post_one(&mut self, idx: usize) {
+        let s = &mut unsafe { self.image_mut().sem_file[idx] };
         unsafe { Self::_sem_post(s) };
     }
     unsafe fn _sem_post(s: &mut libc::sem_t) {
@@ -137,8 +140,8 @@ pub trait Accessor<'a> {
     /// mutiple consumers have called `sem_wait` on the exact same semaphore,
     /// then only one of these callers will be freed when the producer
     /// `sem_post`s.
-    unsafe fn sem_wait(&self, idx: usize) {
-        let s = &mut unsafe { self.image().sem_file.get().read() }[idx];
+    unsafe fn sem_wait(&mut self, idx: usize) {
+        let s = &mut unsafe { self.image_mut().sem_file[idx] };
         let result = unsafe { libc::sem_wait(s) };
         if result < 0 {
             panic!();
@@ -146,9 +149,9 @@ pub trait Accessor<'a> {
     }
 
     /// Read the value of a given semaphore (not typically used).
-    unsafe fn sem_val(&self, idx: usize) -> i32 {
+    unsafe fn sem_val(&mut self, idx: usize) -> i32 {
         let mut sval: i32 = 0;
-        let s = &mut unsafe { self.image().sem_file.get().read() }[idx];
+        let s = &mut unsafe { self.image_mut().sem_file[idx] };
         let result = unsafe { libc::sem_getvalue(s, &mut sval) };
         if result < 0 {
             panic!();
@@ -160,7 +163,7 @@ pub trait Accessor<'a> {
     /// a loop, resets the semaphore value to 0, which guarantees that the next
     /// time the  consumer calls "sem_wait", it will block until the semaphore
     /// has been posted.
-    unsafe fn sem_flush(&self, idx: usize) {
+    unsafe fn sem_flush(&mut self, idx: usize) {
         while unsafe { self.sem_val(idx) } > 0 {
             unsafe { self.sem_wait(idx) };
         }
@@ -170,13 +173,13 @@ pub trait Accessor<'a> {
     /// this slice are directly mapped to the bytes in the shm image. This is
     /// the least-safe way to access image data, as it requires you to manage
     /// the "md.write" flag.
-    unsafe fn array_mut(&mut self) -> &'a mut [Self::DTYPE] {
-        Self::DTYPE::from_bytes_mut(unsafe { self.image().array.get().read() })
+    fn array_mut(&'a mut self) -> &'a mut [Self::DTYPE] {
+        Self::DTYPE::from_bytes_mut(unsafe { self.image_mut().array })
     }
 
     /// Returns a clone of the ImageMetadata.
     fn metadata(&self) -> ImageMetadata {
-        unsafe { self.image().md.get().read().clone() }
+        unsafe { self.image().md.clone() }
     }
 }
 
@@ -204,7 +207,7 @@ impl<'a, T: IsioDataType> RawImage<'a, T> {
             ImageType::image(),
             0,
         )?;
-        let found_dt = unsafe { image.md.get().read().datatype };
+        let found_dt = image.md.datatype;
         if Into::<u8>::into(T::to_datatype()) != found_dt {
             Err(Error::MismatchDataType {
                 expected: T::to_datatype(),
@@ -222,9 +225,9 @@ impl<'a, T: IsioDataType> RawImage<'a, T> {
 
     /// Open an image with a specified name. Returns an error if the image
     /// doesnt exist, or if it exists with the wrong datatype.
-    pub fn open(name: &'a str) -> Result<Self, Error> {
+    pub fn open(name: &str) -> Result<Self, Error> {
         let image = Image::open_image(name)?;
-        let found_dt = unsafe { image.md.get().read().datatype };
+        let found_dt = image.md.datatype;
         if Into::<u8>::into(T::to_datatype()) != found_dt {
             Err(Error::MismatchDataType {
                 expected: T::to_datatype(),
@@ -243,7 +246,12 @@ impl<'a, T: IsioDataType> RawImage<'a, T> {
 
 impl<'a, T: IsioDataType> Accessor<'a> for RawImage<'a, T> {
     type DTYPE = T;
+
     unsafe fn image(&self) -> &Image<'a> {
         &self._image
+    }
+
+    unsafe fn image_mut(&mut self) -> &mut Image<'a> {
+        &mut self._image
     }
 }

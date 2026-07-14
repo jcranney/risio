@@ -4,7 +4,6 @@ use crate::datatype::*;
 use crate::error::Error;
 use crate::imagestreamio::byte_structs::*;
 use memmap2::MmapMut;
-use std::cell::UnsafeCell;
 use std::slice::from_raw_parts;
 use std::slice::from_raw_parts_mut;
 use std::{path::PathBuf, str::FromStr};
@@ -157,23 +156,23 @@ impl<'a> Image<'a> {
             create_cnt: 1,
             shm_fd: -1,
             mem_size: memsize as u64,
-            sem_log: UnsafeCell::new(sem_log),
-            md: UnsafeCell::new(md),
-            array: UnsafeCell::new(array),
+            sem_log,
+            md,
+            array,
             // // semptr,
-            kw: UnsafeCell::new(kw),
-            sem_file: UnsafeCell::new(sem_file),
-            sem_read_pid: UnsafeCell::new(sem_read_pid),
-            sem_write_pid: UnsafeCell::new(sem_write_pid),
-            sem_ctrl: UnsafeCell::new(sem_ctrl),
-            sem_status: UnsafeCell::new(sem_status),
-            stream_proc_trace: UnsafeCell::new(stream_proc_trace),
+            kw,
+            sem_file,
+            sem_read_pid,
+            sem_write_pid,
+            sem_ctrl,
+            sem_status,
+            stream_proc_trace,
             // flagarray: [].as_mut(),
-            cnt_array: UnsafeCell::new(cnt_array),
-            a_time_array: UnsafeCell::new(a_time_array),
-            write_time_array: UnsafeCell::new(write_time_array),
-            circ_buff_md: UnsafeCell::new(circ_buff_md),
-            cb_im_data: UnsafeCell::new(cb_im_data),
+            cnt_array,
+            a_time_array,
+            write_time_array,
+            circ_buff_md,
+            cb_im_data,
             mmap,
         };
 
@@ -503,7 +502,10 @@ impl<'a> Image<'a> {
             });
         mmap.get_next_mut_ptr(round_up_8(imdatamemsize * cb_size))?
             .copy_from_slice(unsafe {
-                core::slice::from_raw_parts(cb_imdata.as_ptr().cast(), round_up_8(imdatamemsize * cb_size))
+                core::slice::from_raw_parts(
+                    cb_imdata.as_ptr().cast(),
+                    round_up_8(imdatamemsize * cb_size),
+                )
             });
         assert_eq!(
             image_memsize, mmap.idx,
@@ -512,13 +514,13 @@ impl<'a> Image<'a> {
         mmap.map.flush()?;
         let map = mmap.map;
         let image = Self::from_mmap_mut(map)?;
-        for s in unsafe { image.sem_file.get().read() } {
+        for s in &mut *image.sem_file {
             match unsafe { libc::sem_init(s, 1, SEMAPHORE_INITVAL) } {
                 e if e < 0 => Self::fetch_io_err()?,
                 _ => (),
             }
         }
-        match unsafe { libc::sem_init(image.sem_log.get().read(), 1, SEMAPHORE_INITVAL) } {
+        match unsafe { libc::sem_init(image.sem_log, 1, SEMAPHORE_INITVAL) } {
             e if e < 0 => Self::fetch_io_err()?,
             _ => (),
         };
@@ -702,51 +704,51 @@ pub struct Image<'a> {
     /// total size in memory if shared
     pub mem_size: u64,
     /// pointer to semaphore for logging  (8 bytes on 64-bit system)
-    pub sem_log: UnsafeCell<&'a mut libc::sem_t>,
+    pub sem_log: &'a mut libc::sem_t,
     /// pointer to image metadata
-    pub md: UnsafeCell<&'a mut ImageMetadata>,
+    pub md: &'a mut ImageMetadata,
     /// pointer to data array
-    pub array: UnsafeCell<&'a mut [u8]>,
+    pub array: &'a mut [u8],
 
     /// array of pointers to semaphores   (each 8 bytes on 64-bit system)
     // pub semptr: &'a mut [&'a mut libc::sem_t],
     /// array of image Keywords
-    pub kw: UnsafeCell<&'a mut [ImageKeyword]>,
+    pub kw: &'a mut [ImageKeyword],
     /// array of semfiles
-    pub sem_file: UnsafeCell<&'a mut [libc::sem_t]>,
+    pub sem_file: &'a mut [libc::sem_t],
     /// PID of process that read shared memory stream
     /// Initialized at 0. Otherwise, when process is waiting on semaphore, its PID is written in this array
     /// The array can be used to look for available semaphores
-    pub sem_read_pid: UnsafeCell<&'a mut [std::os::raw::c_int]>,
+    pub sem_read_pid: &'a mut [std::os::raw::c_int],
     /// PID of processes that are posting the semaphores (JC: I guess there should usually only be one?)
-    pub sem_write_pid: UnsafeCell<&'a mut [std::os::raw::c_int]>,
+    pub sem_write_pid: &'a mut [std::os::raw::c_int],
     /// semaphore control, written by writer to control semaphore behavior.
     /// See SEMAPHORE_CONTROL_XXX defines for details
-    pub sem_ctrl: UnsafeCell<&'a mut [u32]>,
+    pub sem_ctrl: &'a mut [u32],
     /// semaphore status, written by readers to report back to stream what is their current status.
     /// See SEMAPHORE_STATUS_XXX defines for details
-    pub sem_status: UnsafeCell<&'a mut [u32]>,
+    pub sem_status: &'a mut [u32],
     // array to keep track of stream history/depedencies
-    pub stream_proc_trace: UnsafeCell<&'a mut [StreamProcTrace]>,
+    pub stream_proc_trace: &'a mut [StreamProcTrace],
     // /// flag for each slice if needed (depends on imagetype)
     // pub flagarray: &'a mut [u64],
     /// For circular buffer: counter array for circular buffer, copy of cnt0 onto slice index
-    pub cnt_array: UnsafeCell<&'a mut [u64]>,
+    pub cnt_array: &'a mut [u64],
     /// For each slice index: time at which data was acquires/created.
     /// This time CAN be copied from input to output
-    pub a_time_array: UnsafeCell<&'a mut [TimeSpec]>,
+    pub a_time_array: &'a mut [TimeSpec],
     /// For each slice index: time at which data was written.
     /// This time CAN be copied from input to output
-    pub write_time_array: UnsafeCell<&'a mut [TimeSpec]>,
+    pub write_time_array: &'a mut [TimeSpec],
 
     /// Circular Buffer (CB) option
     /// if CBsize>0, recent frames are memcpied in circular buffer
     /// recent frames may be accessed in small CB for logging.
     ///
     /// array of CB metadata
-    pub circ_buff_md: UnsafeCell<&'a mut [CBFrameMetadata]>,
+    pub circ_buff_md: &'a mut [CBFrameMetadata],
     /// data storage for circ buffer
-    pub cb_im_data: UnsafeCell<&'a mut [u8]>,
+    pub cb_im_data: &'a mut [u8],
     /// memory mapping
     pub mmap: MmapMut,
 }

@@ -3,7 +3,7 @@ use rand::random;
 use risio::{Accessor, RawImage, error::Error};
 
 fn main() -> Result<(), Error> {
-    let image: RawImage<f64> = match RawImage::create_new("noise", &[100, 100]) {
+    let mut image: RawImage<f64> = match RawImage::create_new("noise", &[100, 100]) {
         Ok(x) => {
             println!("created new image!");
             x

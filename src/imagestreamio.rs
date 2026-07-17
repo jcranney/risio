@@ -3,6 +3,8 @@ use crate::bindings::*;
 use crate::datatype::*;
 use crate::error::Error;
 use crate::imagestreamio::byte_structs::*;
+use libc::sem_t;
+use memmap2::Mmap;
 use memmap2::MmapMut;
 use std::slice::from_raw_parts;
 use std::slice::from_raw_parts_mut;
@@ -44,142 +46,7 @@ impl<'a> Image<'a> {
         Err(std::io::Error::from_raw_os_error(x))?
     }
 
-    // fn to_mmap_mut(self) -> Result<MmapMut> {
-    //     todo!()
-    // }
-
-    fn from_mmap_mut(mut mmap: MmapMut) -> Result<Self, Error> {
-        // so now we want to populate the data in a new IMAGE from mmap.
-        // I guess either the mmap data is contiguous, or the IMAGE data is
-        // contiguous, not both. So perhaps the IMAGE data is all simply cloned
-        // from the SHM, including pointers etc.s
-        let memsize = mmap.len();
-
-        // first up is image metadata.
-        let (chunk, leftover) = mmap.split_at_mut(round_up_8(size_of::<ImageMetadata>()));
-        let md: &mut ImageMetadata = unsafe {
-            chunk
-                .as_mut_ptr()
-                .cast::<ImageMetadata>()
-                .as_mut_unchecked()
-        };
-
-        let md_tmp = md.clone();
-        DataType::try_from(md_tmp.datatype)?;
-
-        // image array:
-        let (chunk, leftover) = leftover.split_at_mut(round_up_8(md_tmp.imdatamemsize as usize));
-        let array: &mut [u8] = unsafe {
-            from_raw_parts_mut(
-                chunk.as_mut_ptr(),
-                round_up_8(md_tmp.imdatamemsize as usize),
-            )
-        };
-        let (chunk, leftover) = leftover.split_at_mut(round_up_8(
-            size_of::<ImageKeyword>() * md_tmp.nb_kw as usize,
-        ));
-        let kw: &mut [ImageKeyword] =
-            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.nb_kw as usize) };
-
-        let (chunk, leftover) =
-            leftover.split_at_mut(round_up_8(size_of::<libc::sem_t>() * md_tmp.sem as usize));
-        let sem_file: &mut [libc::sem_t] =
-            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
-
-        let (chunk, leftover) = leftover.split_at_mut(round_up_8(size_of::<libc::sem_t>()));
-        let sem_log: &mut libc::sem_t =
-            { unsafe { chunk.as_mut_ptr().cast::<libc::sem_t>().as_mut_unchecked() } };
-
-        let (chunk, leftover) =
-            leftover.split_at_mut(round_up_8(size_of::<i32>() * md_tmp.sem as usize));
-        let sem_read_pid: &mut [i32] =
-            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
-
-        let (chunk, leftover) =
-            leftover.split_at_mut(round_up_8(size_of::<i32>() * md_tmp.sem as usize));
-        let sem_write_pid: &mut [i32] =
-            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
-
-        let (chunk, leftover) =
-            leftover.split_at_mut(round_up_8(size_of::<u32>() * md_tmp.sem as usize));
-        let sem_ctrl: &mut [u32] =
-            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
-
-        let (chunk, leftover) =
-            leftover.split_at_mut(round_up_8(size_of::<u32>() * md_tmp.sem as usize));
-        let sem_status: &mut [u32] =
-            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
-
-        let (chunk, leftover) = leftover.split_at_mut(round_up_8(
-            size_of::<StreamProcTrace>() * IMAGE_NB_PROCTRACE as usize,
-        ));
-        let stream_proc_trace: &mut [StreamProcTrace] =
-            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), IMAGE_NB_PROCTRACE as usize) };
-
-        let (chunk, leftover) =
-            leftover.split_at_mut(round_up_8(size_of::<TimeSpec>() * md_tmp.size[2] as usize));
-        let a_time_array: &mut [TimeSpec] =
-            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.size[2] as usize) };
-
-        let (chunk, leftover) =
-            leftover.split_at_mut(round_up_8(size_of::<TimeSpec>() * md_tmp.size[2] as usize));
-        let write_time_array: &mut [TimeSpec] =
-            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.size[2] as usize) };
-
-        let (chunk, leftover) =
-            leftover.split_at_mut(round_up_8(size_of::<u64>() * md_tmp.size[2] as usize));
-        let cnt_array: &mut [u64] =
-            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.size[2] as usize) };
-
-        let (chunk, leftover) = leftover.split_at_mut(round_up_8(
-            size_of::<CBFrameMetadata>() * md_tmp.cb_size as usize,
-        ));
-        let circ_buff_md: &mut [CBFrameMetadata] =
-            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.cb_size as usize) };
-
-        let (chunk, leftover) = leftover.split_at_mut(round_up_8(
-            md_tmp.imdatamemsize as usize * md_tmp.cb_size as usize,
-        ));
-        let cb_im_data: &mut [u8] = unsafe {
-            from_raw_parts_mut(
-                chunk.as_mut_ptr(),
-                round_up_8(md_tmp.imdatamemsize as usize * md_tmp.cb_size as usize),
-            )
-        };
-
-        // should be nothing left in mmap:
-        assert_eq!(leftover.len(), 0);
-
-        let image: Image<'a> = Self {
-            name: md_tmp.name,
-            used: 1,
-            create_cnt: 1,
-            shm_fd: -1,
-            mem_size: memsize as u64,
-            sem_log,
-            md,
-            array,
-            // // semptr,
-            kw,
-            sem_file,
-            sem_read_pid,
-            sem_write_pid,
-            sem_ctrl,
-            sem_status,
-            stream_proc_trace,
-            // flagarray: [].as_mut(),
-            cnt_array,
-            a_time_array,
-            write_time_array,
-            circ_buff_md,
-            cb_im_data,
-            mmap,
-        };
-
-        Ok(image)
-    }
-
-    pub fn create_new_image_from_scratch(
+    pub fn new(
         name: &str,
         shape: &[usize],
         datatype: DataType,
@@ -237,22 +104,32 @@ impl<'a> Image<'a> {
         let mut sem_write_pid: Vec<i32> = vec![];
         let mut sem_ctrl: Vec<u32> = vec![];
         let mut sem_status: Vec<u32> = vec![];
-        let mut semfile: Vec<SEMFILEDATA> = vec![];
+        let mut semfile: Vec<sem_t> = vec![];
         // TODO:, I'd like to look into how much of this is replaceable with
         // rust safe code.
         for semindex in 0..NB_SEM {
-            let semfile_tmp: SEMFILEDATA = SEMFILEDATA {
-                semdata: unsafe { std::mem::zeroed() },
-            };
+            let semfile_tmp: sem_t = unsafe { std::mem::zeroed() };
             sem_read_pid.push(-1);
             sem_write_pid.push(-1);
             sem_ctrl.push(0);
             sem_status.push(0);
             semfile.push(semfile_tmp);
-            semptr.push(&mut semfile[semindex].semdata);
+            semptr.push(&mut semfile[semindex]);
         }
 
         let semlog: *mut sem_t = &mut unsafe { std::mem::zeroed() };
+
+        for s in &mut semfile {
+            match unsafe { libc::sem_init(s, 1, SEMAPHORE_INITVAL) } {
+                e if e < 0 => Self::fetch_io_err()?,
+                _ => (),
+            }
+        }
+
+        match unsafe { libc::sem_init(semlog, 1, SEMAPHORE_INITVAL) } {
+            e if e < 0 => Self::fetch_io_err()?,
+            _ => (),
+        };
 
         let mut stream_proc_trace: Vec<STREAM_PROC_TRACE> = vec![];
         stream_proc_trace.resize(IMAGE_NB_PROCTRACE as usize, STREAM_PROC_TRACE::new());
@@ -376,46 +253,42 @@ impl<'a> Image<'a> {
             imdatamemsize: imdatamemsize as u64,
             cudaMemHandle: [0; 64], // TODO: find initialisastion in C library.
         };
-
-        struct MapOwner {
-            map: MmapMut,
+        struct DataOwner {
+            data: Vec<u8>,
             idx: usize,
         }
-        impl MapOwner {
-            fn new(file: std::fs::File) -> Result<Self, Error> {
-                Ok(Self {
-                    map: unsafe { MmapMut::map_mut(&file)? },
+        impl DataOwner {
+            fn new(len: usize) -> Self {
+                Self {
+                    data: vec![0; len],
                     idx: 0,
-                })
+                }
             }
             fn get_next_mut_ptr(&mut self, len: usize) -> Result<&mut [u8], Error> {
                 let new_idx = self.idx + len;
-                if new_idx > self.map.len() {
+                if new_idx > self.data.len() {
                     return Err(Error::RequestingPointerBeyondRange {
-                        map_len: self.map.len(),
+                        data_len: self.data.len(),
                         requested: new_idx,
                     })?;
                 }
-                let result = Ok(&mut self.map[self.idx..self.idx + len]);
+                let result = Ok(&mut self.data[self.idx..self.idx + len]);
                 self.idx = new_idx;
                 result
             }
         }
 
-        let file = std::fs::File::create_new(Self::sm_pname(name)?)?;
-        file.set_len(image_memsize as u64)?;
+        let mut data = DataOwner::new(image_memsize);
 
-        let mut mmap = MapOwner::new(file)?;
-
-        mmap.get_next_mut_ptr(round_up_8(size_of::<IMAGE_METADATA>()))?
+        data.get_next_mut_ptr(round_up_8(size_of::<IMAGE_METADATA>()))?
             .copy_from_slice(unsafe {
                 from_raw_parts(md.cast(), round_up_8(size_of::<IMAGE_METADATA>()))
             });
 
-        mmap.get_next_mut_ptr(round_up_8(imdatamemsize))?
+        data.get_next_mut_ptr(round_up_8(imdatamemsize))?
             .copy_from_slice(unsafe { from_raw_parts(array_raw.UI8, round_up_8(imdatamemsize)) });
 
-        mmap.get_next_mut_ptr(round_up_8(size_of::<IMAGE_KEYWORD>() * nb_kw))?
+        data.get_next_mut_ptr(round_up_8(size_of::<IMAGE_KEYWORD>() * nb_kw))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     kw.as_ptr().cast(),
@@ -423,7 +296,7 @@ impl<'a> Image<'a> {
                 )
             });
 
-        mmap.get_next_mut_ptr(round_up_8(size_of::<SEMFILEDATA>() * NB_SEM))?
+        data.get_next_mut_ptr(round_up_8(size_of::<SEMFILEDATA>() * NB_SEM))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     semfile.as_ptr().cast(),
@@ -431,61 +304,61 @@ impl<'a> Image<'a> {
                 )
             });
 
-        mmap.get_next_mut_ptr(round_up_8(size_of::<sem_t>()))?
+        data.get_next_mut_ptr(round_up_8(size_of::<sem_t>()))?
             .copy_from_slice(unsafe {
                 from_raw_parts(semlog.cast(), round_up_8(size_of::<sem_t>()))
             });
 
-        mmap.get_next_mut_ptr(round_up_8(size_of::<i32>() * NB_SEM))?
+        data.get_next_mut_ptr(round_up_8(size_of::<i32>() * NB_SEM))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     sem_read_pid.as_ptr().cast(),
                     round_up_8(size_of::<i32>() * NB_SEM),
                 )
             });
-        mmap.get_next_mut_ptr(round_up_8(size_of::<i32>() * NB_SEM))?
+        data.get_next_mut_ptr(round_up_8(size_of::<i32>() * NB_SEM))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     sem_write_pid.as_ptr().cast(),
                     round_up_8(size_of::<i32>() * NB_SEM),
                 )
             });
-        mmap.get_next_mut_ptr(round_up_8(size_of::<u32>() * NB_SEM))?
+        data.get_next_mut_ptr(round_up_8(size_of::<u32>() * NB_SEM))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     sem_ctrl.as_ptr().cast(),
                     round_up_8(size_of::<u32>() * NB_SEM),
                 )
             });
-        mmap.get_next_mut_ptr(round_up_8(size_of::<u32>() * NB_SEM))?
+        data.get_next_mut_ptr(round_up_8(size_of::<u32>() * NB_SEM))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     sem_write_pid.as_ptr().cast(),
                     round_up_8(size_of::<u32>() * NB_SEM),
                 )
             });
-        mmap.get_next_mut_ptr(round_up_8(size_of::<STREAM_PROC_TRACE>() * nbproctrace))?
+        data.get_next_mut_ptr(round_up_8(size_of::<STREAM_PROC_TRACE>() * nbproctrace))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     stream_proc_trace.as_ptr().cast(),
                     round_up_8(size_of::<STREAM_PROC_TRACE>() * nbproctrace),
                 )
             });
-        mmap.get_next_mut_ptr(round_up_8(size_of::<timespec>() * len_timedim))?
+        data.get_next_mut_ptr(round_up_8(size_of::<timespec>() * len_timedim))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     atimearray.as_ptr().cast(),
                     round_up_8(size_of::<timespec>() * len_timedim),
                 )
             });
-        mmap.get_next_mut_ptr(round_up_8(size_of::<timespec>() * len_timedim))?
+        data.get_next_mut_ptr(round_up_8(size_of::<timespec>() * len_timedim))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     writetimearray.as_ptr().cast(),
                     round_up_8(size_of::<timespec>() * len_timedim),
                 )
             });
-        mmap.get_next_mut_ptr(round_up_8(size_of::<u64>() * len_timedim))?
+        data.get_next_mut_ptr(round_up_8(size_of::<u64>() * len_timedim))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     cntarray.as_ptr().cast(),
@@ -493,14 +366,14 @@ impl<'a> Image<'a> {
                 )
             });
 
-        mmap.get_next_mut_ptr(round_up_8(size_of::<CBFRAMEMD>() * cb_size))?
+        data.get_next_mut_ptr(round_up_8(size_of::<CBFRAMEMD>() * cb_size))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     circ_buff_md.as_ptr().cast(),
                     round_up_8(size_of::<CBFRAMEMD>() * cb_size),
                 )
             });
-        mmap.get_next_mut_ptr(round_up_8(imdatamemsize * cb_size))?
+        data.get_next_mut_ptr(round_up_8(imdatamemsize * cb_size))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     cb_imdata.as_ptr().cast(),
@@ -508,23 +381,39 @@ impl<'a> Image<'a> {
                 )
             });
         assert_eq!(
-            image_memsize, mmap.idx,
+            image_memsize, data.idx,
             "unexpected data size, something is wrong."
         );
-        mmap.map.flush()?;
-        let map = mmap.map;
-        let image = Self::from_mmap_mut(map)?;
-        for s in &mut *image.sem_file {
-            match unsafe { libc::sem_init(s, 1, SEMAPHORE_INITVAL) } {
-                e if e < 0 => Self::fetch_io_err()?,
-                _ => (),
-            }
-        }
-        match unsafe { libc::sem_init(image.sem_log, 1, SEMAPHORE_INITVAL) } {
-            e if e < 0 => Self::fetch_io_err()?,
-            _ => (),
-        };
+
+        let image = Self::try_from(data.data)?;
         Ok(image)
+    }
+
+    pub fn new_shared(
+        filename: &str,
+        name: &str,
+        shape: &[usize],
+        datatype: DataType,
+        nb_kw: usize,
+        imagetype: ImageType,
+        cb_size: usize,
+    ) -> Result<Self, Error> {
+        let local_im = Self::new(name, shape, datatype, nb_kw, imagetype, cb_size)?;
+        local_im.to_mmapped(filename)
+    }
+
+    pub fn to_mmapped(mut self, filename: &str) -> Result<Self, Error> {
+        let file = std::fs::File::create_new(Self::sm_pname(filename)?)?;
+        file.set_len(self.mem_size)?;
+        let mut mmap = unsafe { MmapMut::map_mut(&file) }?;
+        self.sharing = match self.sharing {
+            Sharing::Local(v) => {
+                mmap.copy_from_slice(&v);
+                Sharing::Mmap(mmap)
+            },
+            Sharing::Mmap(map) => Sharing::Mmap(map),
+        };
+        Ok(self)
     }
 
     pub fn open_image(name: &str) -> Result<Self, Error> {
@@ -535,7 +424,7 @@ impl<'a> Image<'a> {
 
         let mmap = unsafe { MmapMut::map_mut(&file) }?;
 
-        let image = Self::from_mmap_mut(mmap)?;
+        let image = Self::try_from(mmap)?;
         // image.mmap = Some(mmap);
         Ok(image)
     }
@@ -750,5 +639,283 @@ pub struct Image<'a> {
     /// data storage for circ buffer
     pub cb_im_data: &'a mut [u8],
     /// memory mapping
-    pub mmap: MmapMut,
+    pub sharing: Sharing,
+}
+
+/// This enum aims to capture the "owned" data, being a vec of u8's if the
+/// image only exists locally, or a MmapMut if the image is in shared memory
+pub enum Sharing {
+    Local(Vec<u8>),
+    Mmap(MmapMut),
+}
+
+// Quite a lot of duplication in these
+impl TryFrom<MmapMut> for Image<'_> {
+    type Error = Error;
+
+    fn try_from(mut mmap: MmapMut) -> Result<Self, Self::Error> {
+        // so now we want to populate the data in a new IMAGE from mmap.
+        // I guess either the mmap data is contiguous, or the IMAGE data is
+        // contiguous, not both. So perhaps the IMAGE data is all simply cloned
+        // from the SHM, including pointers etc.s
+        let memsize = mmap.len();
+
+        // first up is image metadata.
+        let (chunk, leftover) = mmap.split_at_mut(round_up_8(size_of::<ImageMetadata>()));
+        let md: &mut ImageMetadata = unsafe {
+            chunk
+                .as_mut_ptr()
+                .cast::<ImageMetadata>()
+                .as_mut_unchecked()
+        };
+
+        let md_tmp = md.clone();
+        DataType::try_from(md_tmp.datatype)?;
+
+        // image array:
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(md_tmp.imdatamemsize as usize));
+        let array: &mut [u8] = unsafe {
+            from_raw_parts_mut(
+                chunk.as_mut_ptr(),
+                round_up_8(md_tmp.imdatamemsize as usize),
+            )
+        };
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(
+            size_of::<ImageKeyword>() * md_tmp.nb_kw as usize,
+        ));
+        let kw: &mut [ImageKeyword] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.nb_kw as usize) };
+
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<libc::sem_t>() * md_tmp.sem as usize));
+        let sem_file: &mut [libc::sem_t] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
+
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(size_of::<libc::sem_t>()));
+        let sem_log: &mut libc::sem_t =
+            { unsafe { chunk.as_mut_ptr().cast::<libc::sem_t>().as_mut_unchecked() } };
+
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<i32>() * md_tmp.sem as usize));
+        let sem_read_pid: &mut [i32] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
+
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<i32>() * md_tmp.sem as usize));
+        let sem_write_pid: &mut [i32] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
+
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<u32>() * md_tmp.sem as usize));
+        let sem_ctrl: &mut [u32] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
+
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<u32>() * md_tmp.sem as usize));
+        let sem_status: &mut [u32] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
+
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(
+            size_of::<StreamProcTrace>() * IMAGE_NB_PROCTRACE as usize,
+        ));
+        let stream_proc_trace: &mut [StreamProcTrace] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), IMAGE_NB_PROCTRACE as usize) };
+
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<TimeSpec>() * md_tmp.size[2] as usize));
+        let a_time_array: &mut [TimeSpec] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.size[2] as usize) };
+
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<TimeSpec>() * md_tmp.size[2] as usize));
+        let write_time_array: &mut [TimeSpec] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.size[2] as usize) };
+
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<u64>() * md_tmp.size[2] as usize));
+        let cnt_array: &mut [u64] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.size[2] as usize) };
+
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(
+            size_of::<CBFrameMetadata>() * md_tmp.cb_size as usize,
+        ));
+        let circ_buff_md: &mut [CBFrameMetadata] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.cb_size as usize) };
+
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(
+            md_tmp.imdatamemsize as usize * md_tmp.cb_size as usize,
+        ));
+        let cb_im_data: &mut [u8] = unsafe {
+            from_raw_parts_mut(
+                chunk.as_mut_ptr(),
+                round_up_8(md_tmp.imdatamemsize as usize * md_tmp.cb_size as usize),
+            )
+        };
+
+        // should be nothing left in mmap:
+        assert_eq!(leftover.len(), 0);
+
+        let image = Self {
+            name: md_tmp.name,
+            used: 1,
+            create_cnt: 1,
+            shm_fd: -1,
+            mem_size: memsize as u64,
+            sem_log,
+            md,
+            array,
+            // // semptr,
+            kw,
+            sem_file,
+            sem_read_pid,
+            sem_write_pid,
+            sem_ctrl,
+            sem_status,
+            stream_proc_trace,
+            // flagarray: [].as_mut(),
+            cnt_array,
+            a_time_array,
+            write_time_array,
+            circ_buff_md,
+            cb_im_data,
+            sharing: Sharing::Mmap(mmap),
+        };
+
+        Ok(image)
+    }
+}
+
+impl TryFrom<Vec<u8>> for Image<'_> {
+    type Error = Error;
+
+    fn try_from(mut data: Vec<u8>) -> Result<Self, Self::Error> {
+        // so now we want to populate the data in a new IMAGE from mmap.
+        // I guess either the mmap data is contiguous, or the IMAGE data is
+        // contiguous, not both. So perhaps the IMAGE data is all simply cloned
+        // from the SHM, including pointers etc.s
+        let memsize = data.len();
+
+        // first up is image metadata.
+        let (chunk, leftover) = data.split_at_mut(round_up_8(size_of::<ImageMetadata>()));
+        let md: &mut ImageMetadata = unsafe {
+            chunk
+                .as_mut_ptr()
+                .cast::<ImageMetadata>()
+                .as_mut_unchecked()
+        };
+
+        let md_tmp = md.clone();
+        DataType::try_from(md_tmp.datatype)?;
+
+        // image array:
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(md_tmp.imdatamemsize as usize));
+        let array: &mut [u8] = unsafe {
+            from_raw_parts_mut(
+                chunk.as_mut_ptr(),
+                round_up_8(md_tmp.imdatamemsize as usize),
+            )
+        };
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(
+            size_of::<ImageKeyword>() * md_tmp.nb_kw as usize,
+        ));
+        let kw: &mut [ImageKeyword] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.nb_kw as usize) };
+
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<libc::sem_t>() * md_tmp.sem as usize));
+        let sem_file: &mut [libc::sem_t] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
+
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(size_of::<libc::sem_t>()));
+        let sem_log: &mut libc::sem_t =
+            { unsafe { chunk.as_mut_ptr().cast::<libc::sem_t>().as_mut_unchecked() } };
+
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<i32>() * md_tmp.sem as usize));
+        let sem_read_pid: &mut [i32] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
+
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<i32>() * md_tmp.sem as usize));
+        let sem_write_pid: &mut [i32] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
+
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<u32>() * md_tmp.sem as usize));
+        let sem_ctrl: &mut [u32] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
+
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<u32>() * md_tmp.sem as usize));
+        let sem_status: &mut [u32] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.sem as usize) };
+
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(
+            size_of::<StreamProcTrace>() * IMAGE_NB_PROCTRACE as usize,
+        ));
+        let stream_proc_trace: &mut [StreamProcTrace] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), IMAGE_NB_PROCTRACE as usize) };
+
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<TimeSpec>() * md_tmp.size[2] as usize));
+        let a_time_array: &mut [TimeSpec] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.size[2] as usize) };
+
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<TimeSpec>() * md_tmp.size[2] as usize));
+        let write_time_array: &mut [TimeSpec] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.size[2] as usize) };
+
+        let (chunk, leftover) =
+            leftover.split_at_mut(round_up_8(size_of::<u64>() * md_tmp.size[2] as usize));
+        let cnt_array: &mut [u64] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.size[2] as usize) };
+
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(
+            size_of::<CBFrameMetadata>() * md_tmp.cb_size as usize,
+        ));
+        let circ_buff_md: &mut [CBFrameMetadata] =
+            unsafe { from_raw_parts_mut(chunk.as_mut_ptr().cast(), md_tmp.cb_size as usize) };
+
+        let (chunk, leftover) = leftover.split_at_mut(round_up_8(
+            md_tmp.imdatamemsize as usize * md_tmp.cb_size as usize,
+        ));
+        let cb_im_data: &mut [u8] = unsafe {
+            from_raw_parts_mut(
+                chunk.as_mut_ptr(),
+                round_up_8(md_tmp.imdatamemsize as usize * md_tmp.cb_size as usize),
+            )
+        };
+
+        // should be nothing left in mmap:
+        assert_eq!(leftover.len(), 0);
+
+        let image = Self {
+            name: md_tmp.name,
+            used: 1,
+            create_cnt: 1,
+            shm_fd: -1,
+            mem_size: memsize as u64,
+            sem_log,
+            md,
+            array,
+            // // semptr,
+            kw,
+            sem_file,
+            sem_read_pid,
+            sem_write_pid,
+            sem_ctrl,
+            sem_status,
+            stream_proc_trace,
+            // flagarray: [].as_mut(),
+            cnt_array,
+            a_time_array,
+            write_time_array,
+            circ_buff_md,
+            cb_im_data,
+            sharing: Sharing::Local(data),
+        };
+
+        Ok(image)
+    }
 }

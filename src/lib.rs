@@ -199,7 +199,8 @@ impl<'a, T: IsioDataType> RawImage<'a, T> {
     /// Create a new image with the specified name and shape. Returns an error
     /// if the image already exists.
     pub fn create_new(name: &str, shape: &[usize]) -> Result<Self, Error> {
-        let image = Image::create_new_image_from_scratch(
+        let image = Image::new_shared(
+            name,
             name,
             shape,
             T::to_datatype(),

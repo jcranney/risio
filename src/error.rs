@@ -13,9 +13,9 @@ pub enum Error {
     InvalidShapeArray { shape: Vec<usize> },
     #[error(
         "Requested a slice from memory map which exceeds the size of the map. \
-        Map length: {map_len}, requested up to idx: {requested}"
+        Map length: {data_len}, requested up to idx: {requested}"
     )]
-    RequestingPointerBeyondRange { map_len: usize, requested: usize },
+    RequestingPointerBeyondRange { data_len: usize, requested: usize },
     #[error("Expected IMAGE with type: {:?}, but found image with type: {:?}", expected, found)]
     MismatchDataType{expected: DataType, found: DataType},
     #[error("Unsupported data type index: {0}")]

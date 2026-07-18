@@ -112,8 +112,11 @@ pub trait Accessor<'a> {
     /// This function posts to all semaphores in this shm image, which is a
     /// common pattern for "single producer, multiple consumer" shared memory.
     unsafe fn sem_post_all(&mut self) {
-        for i in 0..self.metadata().sem {
-            unsafe { self.sem_post_one(i as usize) };
+        for sem in unsafe { self.image_mut().sem_file.iter_mut() } {
+            let result = unsafe { libc::sem_post(sem) };
+            if result < 0 {
+                panic!();
+            }
         }
     }
     /// Post to a single semaphores in this shm image, which can be useful in
@@ -121,11 +124,8 @@ pub trait Accessor<'a> {
     /// processes modify the image data in-place, and the semaphores are used
     /// to establish a "sequence" of work.
     unsafe fn sem_post_one(&mut self, idx: usize) {
-        let s = &mut unsafe { self.image_mut().sem_file[idx] };
-        unsafe { Self::_sem_post(s) };
-    }
-    unsafe fn _sem_post(s: &mut libc::sem_t) {
-        let result = unsafe { libc::sem_post(s) };
+        let sem = unsafe { &mut self.image_mut().sem_file[idx] };
+        let result = unsafe { libc::sem_post(sem) };
         if result < 0 {
             panic!();
         }
@@ -141,8 +141,8 @@ pub trait Accessor<'a> {
     /// then only one of these callers will be freed when the producer
     /// `sem_post`s.
     unsafe fn sem_wait(&mut self, idx: usize) {
-        let s = &mut unsafe { self.image_mut().sem_file[idx] };
-        let result = unsafe { libc::sem_wait(s) };
+        let sem = unsafe { &mut self.image_mut().sem_file[idx] };
+        let result = unsafe { libc::sem_wait(sem) };
         if result < 0 {
             panic!();
         }
@@ -151,8 +151,8 @@ pub trait Accessor<'a> {
     /// Read the value of a given semaphore (not typically used).
     unsafe fn sem_val(&mut self, idx: usize) -> i32 {
         let mut sval: i32 = 0;
-        let s = &mut unsafe { self.image_mut().sem_file[idx] };
-        let result = unsafe { libc::sem_getvalue(s, &mut sval) };
+        let sem = unsafe { &mut self.image_mut().sem_file[idx] };
+        let result = unsafe { libc::sem_getvalue(sem, &mut sval) };
         if result < 0 {
             panic!();
         }
@@ -164,8 +164,17 @@ pub trait Accessor<'a> {
     /// time the  consumer calls "sem_wait", it will block until the semaphore
     /// has been posted.
     unsafe fn sem_flush(&mut self, idx: usize) {
-        while unsafe { self.sem_val(idx) } > 0 {
-            unsafe { self.sem_wait(idx) };
+        let sem = unsafe { &mut self.image_mut().sem_file[idx] };
+        loop {
+            let mut sval: i32 = 0;
+            let result = unsafe { libc::sem_getvalue(sem, &mut sval) };
+            if result < 0 {
+                panic!();
+            }
+            if sval == 0 {
+                break
+            }
+            unsafe { libc::sem_wait(sem) };
         }
     }
 

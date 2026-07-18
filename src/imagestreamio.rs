@@ -189,6 +189,9 @@ impl<'a> Image<'a> {
         // shared: bool,  (shared==true for now...)
         // int8_t location, (-1: CPU RAM for now)
     ) -> Result<Self, Error> {
+        // Create memory mapped file early on to catch io errors quickly
+        let file = std::fs::File::create_new(Self::sm_pname(name)?)?;
+
         let naxis: usize = shape.len();
         const NB_SEM: usize = IMAGE_NB_SEMAPHORE as usize;
 
@@ -232,28 +235,29 @@ impl<'a> Image<'a> {
         let kw: Vec<IMAGE_KEYWORD> = (0..nb_kw).map(|_| IMAGE_KEYWORD::new()).collect();
 
         // - Assign pointers; initialize the semphores and their data
-        let mut semptr: Vec<*mut sem_t> = vec![];
+        // let mut semptr: Vec<*mut sem_t> = vec![];
         let mut sem_read_pid: Vec<i32> = vec![];
         let mut sem_write_pid: Vec<i32> = vec![];
         let mut sem_ctrl: Vec<u32> = vec![];
         let mut sem_status: Vec<u32> = vec![];
-        let mut semfile: Vec<SEMFILEDATA> = vec![];
-        // TODO:, I'd like to look into how much of this is replaceable with
-        // rust safe code.
-        for semindex in 0..NB_SEM {
-            let semfile_tmp: SEMFILEDATA = SEMFILEDATA {
-                semdata: unsafe { std::mem::zeroed() },
-            };
+        let mut semfile: Vec<sem_t> = vec![];
+        for _ in 0..NB_SEM {
+            let mut semfile_tmp: sem_t = unsafe { std::mem::zeroed() };
             sem_read_pid.push(-1);
             sem_write_pid.push(-1);
             sem_ctrl.push(0);
             sem_status.push(0);
+            match unsafe { libc::sem_init(&mut semfile_tmp, 1, SEMAPHORE_INITVAL) } {
+                e if e < 0 => Self::fetch_io_err()?,
+                _ => (),
+            };
             semfile.push(semfile_tmp);
-            semptr.push(&mut semfile[semindex].semdata);
         }
-
         let semlog: *mut sem_t = &mut unsafe { std::mem::zeroed() };
-
+        match unsafe { libc::sem_init(semlog, 1, SEMAPHORE_INITVAL) } {
+            e if e < 0 => Self::fetch_io_err()?,
+            _ => (),
+        };
         let mut stream_proc_trace: Vec<STREAM_PROC_TRACE> = vec![];
         stream_proc_trace.resize(IMAGE_NB_PROCTRACE as usize, STREAM_PROC_TRACE::new());
 
@@ -287,9 +291,7 @@ impl<'a> Image<'a> {
             },
         );
         cntarray.resize(len_timedim, 0);
-        //     }
-        //     _ => (),
-        // };
+
 
         let mut circ_buff_md = Vec::new();
         circ_buff_md.resize(cb_size, CBFRAMEMD::new());
@@ -311,6 +313,9 @@ impl<'a> Image<'a> {
         image_memsize += round_up_8(size_of::<u64>() * len_timedim); // cntarray
         image_memsize += round_up_8(size_of::<CBFRAMEMD>() * cb_size);
         image_memsize += round_up_8(imdatamemsize * cb_size);
+        let image_memsize = image_memsize;
+        file.set_len(image_memsize as u64)?;
+        let mut mmap = MapOwner::new(file)?;
 
         // let file_stat: stat = unsafe { std::mem::zeroed() };
         // match unsafe { libc::fstat(fd, &mut file_stat) } {
@@ -402,11 +407,6 @@ impl<'a> Image<'a> {
             }
         }
 
-        let file = std::fs::File::create_new(Self::sm_pname(name)?)?;
-        file.set_len(image_memsize as u64)?;
-
-        let mut mmap = MapOwner::new(file)?;
-
         mmap.get_next_mut_ptr(round_up_8(size_of::<IMAGE_METADATA>()))?
             .copy_from_slice(unsafe {
                 from_raw_parts(md.cast(), round_up_8(size_of::<IMAGE_METADATA>()))
@@ -423,11 +423,11 @@ impl<'a> Image<'a> {
                 )
             });
 
-        mmap.get_next_mut_ptr(round_up_8(size_of::<SEMFILEDATA>() * NB_SEM))?
+        mmap.get_next_mut_ptr(round_up_8(size_of::<sem_t>() * NB_SEM))?
             .copy_from_slice(unsafe {
                 core::slice::from_raw_parts(
                     semfile.as_ptr().cast(),
-                    round_up_8(size_of::<SEMFILEDATA>() * NB_SEM),
+                    round_up_8(size_of::<sem_t>() * NB_SEM),
                 )
             });
 
@@ -514,16 +514,6 @@ impl<'a> Image<'a> {
         mmap.map.flush()?;
         let map = mmap.map;
         let image = Self::from_mmap_mut(map)?;
-        for s in &mut *image.sem_file {
-            match unsafe { libc::sem_init(s, 1, SEMAPHORE_INITVAL) } {
-                e if e < 0 => Self::fetch_io_err()?,
-                _ => (),
-            }
-        }
-        match unsafe { libc::sem_init(image.sem_log, 1, SEMAPHORE_INITVAL) } {
-            e if e < 0 => Self::fetch_io_err()?,
-            _ => (),
-        };
         Ok(image)
     }
 
@@ -536,7 +526,6 @@ impl<'a> Image<'a> {
         let mmap = unsafe { MmapMut::map_mut(&file) }?;
 
         let image = Self::from_mmap_mut(mmap)?;
-        // image.mmap = Some(mmap);
         Ok(image)
     }
 }

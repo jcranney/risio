@@ -7,12 +7,15 @@ fn main() -> Result<(), Error> {
             x
         }
         Err(_) => {
+            let im = RawImage::open("noise")?;
             println!("opened existing image");
-            RawImage::open("noise")?
+            im
         }
     };
     let mut cnt: usize = 0;
+    println!("flushing!");
     unsafe { image.sem_flush(0) };
+    println!("flushed!");
     loop {
         cnt += 1;
         println!("semval: {}", unsafe { image.sem_val(0) });

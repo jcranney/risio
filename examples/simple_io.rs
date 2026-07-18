@@ -1,7 +1,7 @@
-use risio::{Accessor, RawImage, error::Error};
+use risio::{Accessor, ShmImage, error::Error};
 
 fn main() -> Result<(), Error> {
-    let mut image: RawImage<u64> = RawImage::create_new("myimname", &[10, 12])?;
+    let mut image: ShmImage<u64> = ShmImage::create_new("myimname", &[10, 12])?;
     println!("{}", unsafe { image.array()[0] });
     for x in std::io::stdin().lines().into_iter() {
         match x?.parse() {

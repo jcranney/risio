@@ -1,16 +1,16 @@
 use std::time::Duration;
 use rand::random;
-use risio::{Accessor, RawImage, error::Error};
+use risio::{Accessor, ShmImage, error::Error};
 
 fn main() -> Result<(), Error> {
-    let mut image: RawImage<f64> = match RawImage::create_new("noise", &[100, 100]) {
+    let mut image: ShmImage<f64> = match ShmImage::create_new("noise", &[100, 100]) {
         Ok(x) => {
             println!("created new image!");
             x
         }
         Err(_) => {
             println!("opened existing image");
-            RawImage::open("noise")?
+            ShmImage::open("noise")?
         }
     };
     let mut cnt: usize = 0;

@@ -1,10 +1,10 @@
-use risio::{Accessor, RawImage};
+use risio::{Accessor, ShmImage};
 
 #[test]
 fn main() {
-    let mut image: RawImage<u64> = match RawImage::open("myimname") {
+    let mut image: ShmImage<u64> = match ShmImage::open("myimname") {
         Ok(img) => img,
-        Err(_) => RawImage::create_new("myimname", &[10, 12]).unwrap(),
+        Err(_) => ShmImage::create_new("myimname", &[10, 12]).unwrap(),
     };
     let array = unsafe { image.array() };
     let y = array[0];

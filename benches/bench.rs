@@ -1,18 +1,19 @@
 use criterion::{Criterion, criterion_group, criterion_main};
+use memmap2::MmapMut;
 use rayon::{
     self,
     iter::{IntoParallelRefMutIterator, ParallelIterator},
 };
 use std::time::Instant;
 
-use risio::{Accessor, RawImage};
+use risio::{Accessor, ShmImage};
 
 const IMNAME: &str = "benchy";
 const IMSHAPE: &[usize; 2] = &[1000, 1200];
 
 fn par_modify_image<'a, T>(image: &mut T)
 where
-    T: Accessor<'a, DTYPE = f64>,
+    T: Accessor<'a, MmapMut, DTYPE = f64>,
 {
     unsafe {
         image
@@ -25,7 +26,7 @@ where
 
 fn modify_image<'a, T>(image: &mut T)
 where
-    T: Accessor<'a, DTYPE = f64>,
+    T: Accessor<'a, MmapMut, DTYPE = f64>,
 {
     unsafe {
         image
@@ -53,11 +54,11 @@ fn bench_modify_image(c: &mut Criterion) {
     group.bench_function("modify serial", move |b| {
         b.iter_batched_ref(
             || {
-                match RawImage::<f64>::open(IMNAME) {
+                match ShmImage::<f64>::open(IMNAME) {
                     Ok(img) => img,
                     Err(_) => {
                         // couldn't open it, we can try to create it
-                        RawImage::create_new(IMNAME, IMSHAPE).unwrap()
+                        ShmImage::create_new(IMNAME, IMSHAPE).unwrap()
                     }
                 }
             },
@@ -68,11 +69,11 @@ fn bench_modify_image(c: &mut Criterion) {
     group.bench_function("modify rayon", move |b| {
         b.iter_batched_ref(
             || {
-                match RawImage::<f64>::open(IMNAME) {
+                match ShmImage::<f64>::open(IMNAME) {
                     Ok(img) => img,
                     Err(_) => {
                         // couldn't open it, we can try to create it
-                        RawImage::create_new(IMNAME, IMSHAPE).unwrap()
+                        ShmImage::create_new(IMNAME, IMSHAPE).unwrap()
                     }
                 }
             },
@@ -83,11 +84,11 @@ fn bench_modify_image(c: &mut Criterion) {
 
     group.bench_function("array serial", move |b| {
         b.iter_custom(|iters| {
-            let mut image = match RawImage::<f64>::open(IMNAME) {
+            let mut image = match ShmImage::<f64>::open(IMNAME) {
                 Ok(img) => img,
                 Err(_) => {
                     // couldn't open it, we can try to create it
-                    RawImage::create_new(IMNAME, IMSHAPE).unwrap()
+                    ShmImage::create_new(IMNAME, IMSHAPE).unwrap()
                 }
             };
             let array = image.array_mut();
@@ -101,11 +102,11 @@ fn bench_modify_image(c: &mut Criterion) {
 
     group.bench_function("array rayon", move |b| {
         b.iter_custom(|iters| {
-            let mut image = match RawImage::<f64>::open(IMNAME) {
+            let mut image = match ShmImage::<f64>::open(IMNAME) {
                 Ok(img) => img,
                 Err(_) => {
                     // couldn't open it, we can try to create it
-                    RawImage::create_new(IMNAME, IMSHAPE).unwrap()
+                    ShmImage::create_new(IMNAME, IMSHAPE).unwrap()
                 }
             };
             let array = image.array_mut();

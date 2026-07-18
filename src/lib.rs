@@ -8,6 +8,7 @@ mod bindings;
 pub mod datatype;
 pub mod error;
 pub mod imagestreamio;
+use memmap2::MmapMut;
 #[cfg(feature = "rayon")]
 use rayon::{
     self,
@@ -30,13 +31,15 @@ use crate::imagestreamio::{
 /// race conditions and improper implementation are greatly reduced, but since
 /// the user requires fast access to shared memory, it's unlikely that any
 /// implementation can ever be truly "safe".
-pub trait Accessor<'a> {
+pub trait Accessor<'a, T> 
+where T: 'a
+{
     type DTYPE: IsioDataType;
 
     /// returns an Image object, which contains many `UnsafeCell`s that contain
     /// mutable references pointing to shared memory.
-    unsafe fn image(&self) -> &Image<'a>;
-    unsafe fn image_mut(&mut self) -> &mut Image<'a>;
+    unsafe fn image(&self) -> &Image<'a, T>;
+    unsafe fn image_mut(&mut self) -> &mut Image<'a, T>;
 
     /// Returns the memory mapped image data as an immutable slice. The elements
     /// of this slice are directly mapped to the bytes in the shm image. This
@@ -197,18 +200,18 @@ pub enum SemIdx {
     All,
 }
 
-pub struct RawImage<'a, T: IsioDataType> {
+pub struct ShmImage<'a, T: IsioDataType> {
     pub _im_name: String,
-    pub _image: Image<'a>,
+    pub _image: Image<'a, memmap2::MmapMut>,
     _phantom_data: PhantomData<T>,
     // _mmap: MmapMut,
 }
 
-impl<'a, T: IsioDataType> RawImage<'a, T> {
+impl<'a, T: IsioDataType> ShmImage<'a, T> {
     /// Create a new image with the specified name and shape. Returns an error
     /// if the image already exists.
     pub fn create_new(name: &str, shape: &[usize]) -> Result<Self, Error> {
-        let image = Image::new_shared(
+        let image = unsafe { Image::new_shm(
             name,
             name,
             shape,
@@ -216,7 +219,7 @@ impl<'a, T: IsioDataType> RawImage<'a, T> {
             10,
             ImageType::image(),
             0,
-        )?;
+        ) }?;
         let found_dt = image.md.datatype;
         if Into::<u8>::into(T::to_datatype()) != found_dt {
             Err(Error::MismatchDataType {
@@ -236,7 +239,7 @@ impl<'a, T: IsioDataType> RawImage<'a, T> {
     /// Open an image with a specified name. Returns an error if the image
     /// doesnt exist, or if it exists with the wrong datatype.
     pub fn open(name: &str) -> Result<Self, Error> {
-        let image = Image::open_image(name)?;
+        let image = unsafe { Image::open_image(name) }?;
         let found_dt = image.md.datatype;
         if Into::<u8>::into(T::to_datatype()) != found_dt {
             Err(Error::MismatchDataType {
@@ -254,14 +257,14 @@ impl<'a, T: IsioDataType> RawImage<'a, T> {
     }
 }
 
-impl<'a, T: IsioDataType> Accessor<'a> for RawImage<'a, T> {
+impl<'a, T: IsioDataType> Accessor<'a, MmapMut> for ShmImage<'a, T> {
     type DTYPE = T;
 
-    unsafe fn image(&self) -> &Image<'a> {
+    unsafe fn image(&self) -> &Image<'a, MmapMut> {
         &self._image
     }
 
-    unsafe fn image_mut(&mut self) -> &mut Image<'a> {
+    unsafe fn image_mut(&mut self) -> &mut Image<'a,MmapMut> {
         &mut self._image
     }
 }

@@ -1,13 +1,13 @@
-use risio::{Accessor, RawImage, error::Error};
+use risio::{Accessor, ShmImage, error::Error};
 
 fn main() -> Result<(), Error> {
-    let mut image: RawImage<f64> = match RawImage::create_new("noise", &[100, 100]) {
+    let mut image: ShmImage<f64> = match ShmImage::create_new("noise", &[100, 100]) {
         Ok(x) => {
             println!("created new image!");
             x
         }
         Err(_) => {
-            let im = RawImage::open("noise")?;
+            let im = ShmImage::open("noise")?;
             println!("opened existing image");
             im
         }

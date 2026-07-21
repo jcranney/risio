@@ -1,3 +1,74 @@
+//! # risio
+//! This crate is intended to be a rust implementation of the C [ImageStreamIO](https://github.com/milk-org/ImageStreamIO)
+//! library (ISIO), targetting real-time control software for adaptive optics systems
+//! along with other high-performance astronomical instrumentation pipelines. This is currently
+//! a hobby project maintained on an on-demand basis. If you intend to rely on this
+//! crate, please reach out to me via github issues or any other channel you have
+//! available.
+//!
+//! Examples of how to use this crate are included in the git repository, so please
+//! check them out. The main use case for the ISIO library is to allow a user
+//! to develop multi-process/parallel pipelines with strict synchronicity requirements,
+//! when large amounts of data is shared between the processes.
+//!
+//! In the rust eco-system, folks often invoke the `golang` proverb:
+//!  > *Do not communicate by sharing memory; instead, share memory by communicating.*
+//!
+//! I don't personally have a strong opinion on sharing memory vs messaging, but
+//! I do know that there is little to no chance for the adaptive optics community
+//! to expunge the shared memory ideology overnight. Rather than to fight a losing
+//! battle that I am not particularly passionate about, instead I'd rather focus
+//! my efforts on providing a "safer" shared memory interface for users of
+//! the prolific ImageStreamIO library. Since shared memory is inherently unsafe
+//! and rust cannot guarantee that other processes will follow safe procedures,
+//! this crate is littered with unsafe functions. It is my opinion, and indeed
+//! the goal of this project, that the rust interface to shared memory images
+//! via `risio` is at-least-as-safe as the C implementation, and explicit where
+//! it is unsafe. It is possible that I have over-specified some functions as unsafe when they
+//! are not, though I have tried to avoid that.
+//!
+//! A simple example for creating a shared memory image in the ISIO format is given
+//! below, followed by another example that could be ran in a separate process,
+//! connecting to the same underlying shared memory. For more examples, see the
+//! git repository [examples](https://github.com/jcranney/risio/tree/main/examples).
+//!
+//! Creating a new shared memory image (and failing safely otherwise), updating
+//! the image and then notifying other processes via semaphore post:
+//! ```
+//! use risio::prelude::*;
+//! use rand::random;
+//! // create a new image at `/dev/shm/noise.im.shm`
+//! let mut image = match ShmImage::<f64>::create_new("noise", &[100, 100]) {
+//!     Ok(im) => im,
+//!     Err(_) => ShmImage::<f64>::open("noise").unwrap(),
+//! };
+//! // mutate the data in a loop:
+//! for _ in 0..10 {
+//!     // set a random value for each pixel
+//!     unsafe { image.modify(|(_idx, value)| *value = random()) }.unwrap();
+//!     // post on all semaphores so that waiting processes are released
+//!     unsafe { image.sem_post_all() };
+//!     // sleep for a moment
+//!     std::thread::sleep(std::time::Duration::from_millis(1));
+//! }
+//! ```
+//! 
+//! Connecting to an existing shared memory image and waiting on the semaphore:
+//! ``` 
+//! use risio::prelude::*;
+//! let mut image: ShmImage<f64> = ShmImage::open("noise").unwrap();
+//! unsafe { image.sem_flush(0) };
+//! // uncomment this line if you want to wait on semaphore before proceeding:
+//! // unsafe { image.sem_wait(0) };
+//! let x: f64 =
+//!     unsafe { image.array().iter().sum::<f64>() } / unsafe { image.array().len() } as f64;
+//! println!("mean(im) = {:0.8}", x);
+//! ```
+
+// NOTE: the above sem_wait call will freeze the docs compilation if not run in
+// parallel, hence why the sem_wait should be commented out. I'm not sure if the
+// github workers are single threaded or not.
+
 #[allow(
     non_snake_case,
     unnecessary_transmutes,
@@ -24,6 +95,10 @@ use crate::imagestreamio::{
     byte_structs::{ImageMetadata, TimeSpec},
 };
 
+pub mod prelude {
+    pub use crate::{Accessor, ShmImage, LocalImage};
+}
+
 /// A type that implements Accessor attempts a form of "interior mutability",
 /// where interaction with shared memory is restricted to a handful of
 /// well-considered methods. By restricting the shared-memory
@@ -31,8 +106,9 @@ use crate::imagestreamio::{
 /// race conditions and improper implementation are greatly reduced, but since
 /// the user requires fast access to shared memory, it's unlikely that any
 /// implementation can ever be truly "safe".
-pub trait Accessor<'a, T> 
-where T: 'a
+pub trait Accessor<'a, T>
+where
+    T: 'a,
 {
     type DTYPE: IsioDataType;
 
@@ -175,7 +251,7 @@ where T: 'a
                 panic!();
             }
             if sval == 0 {
-                break
+                break;
             }
             unsafe { libc::sem_wait(sem) };
         }
@@ -185,7 +261,7 @@ where T: 'a
     /// this slice are directly mapped to the bytes in the shm image. This is
     /// the least-safe way to access image data, as it requires you to manage
     /// the "md.write" flag.
-    fn array_mut(&'a mut self) -> &'a mut [Self::DTYPE] {
+    unsafe fn array_mut(&'a mut self) -> &'a mut [Self::DTYPE] {
         Self::DTYPE::from_bytes_mut(unsafe { self.image_mut().array })
     }
 
@@ -193,11 +269,6 @@ where T: 'a
     fn metadata(&self) -> ImageMetadata {
         unsafe { self.image().md.clone() }
     }
-}
-
-pub enum SemIdx {
-    Only(usize),
-    All,
 }
 
 pub struct ShmImage<'a, T: IsioDataType> {
@@ -211,29 +282,23 @@ impl<'a, T: IsioDataType> ShmImage<'a, T> {
     /// Create a new image with the specified name and shape. Returns an error
     /// if the image already exists.
     pub fn create_new(name: &str, shape: &[usize]) -> Result<Self, Error> {
-        let image = unsafe { Image::new_shm(
-            name,
-            name,
-            shape,
-            T::to_datatype(),
-            10,
-            ImageType::image(),
-            0,
-        ) }?;
-        let found_dt = image.md.datatype;
-        if Into::<u8>::into(T::to_datatype()) != found_dt {
-            Err(Error::MismatchDataType {
-                expected: T::to_datatype(),
-                found: DataType::try_from(found_dt)?,
-            })
-        } else {
-            Ok(Self {
-                _im_name: name.to_string(),
-                _image: image,
-                // _mmap: mmap,
-                _phantom_data: PhantomData::<T>,
-            })
-        }
+        let image = unsafe {
+            Image::new_shm(
+                name,
+                name,
+                shape,
+                T::to_datatype(),
+                10,
+                ImageType::image(),
+                0,
+            )
+        }?;
+        Ok(Self {
+            _im_name: name.to_string(),
+            _image: image,
+            // _mmap: mmap,
+            _phantom_data: PhantomData::<T>,
+        })
     }
 
     /// Open an image with a specified name. Returns an error if the image
@@ -264,7 +329,61 @@ impl<'a, T: IsioDataType> Accessor<'a, MmapMut> for ShmImage<'a, T> {
         &self._image
     }
 
-    unsafe fn image_mut(&mut self) -> &mut Image<'a,MmapMut> {
+    unsafe fn image_mut(&mut self) -> &mut Image<'a, MmapMut> {
         &mut self._image
+    }
+}
+
+pub struct LocalImage<'a, T: IsioDataType> {
+    pub _image: Image<'a, Vec<u8>>,
+    _phantom_data: PhantomData<T>,
+    // _mmap: MmapMut,
+}
+
+impl<'a, T: IsioDataType> LocalImage<'a, T> {
+    /// Create a new image with the specified name and shape. Returns an error
+    /// if the image already exists.
+    pub fn create_new(name: &str, shape: &[usize]) -> Result<Self, Error> {
+        let image = Image::new_local(name, shape, T::to_datatype(), 10, ImageType::image(), 0)?;
+        Ok(Self {
+            _image: image,
+            _phantom_data: PhantomData::<T>,
+        })
+    }
+}
+
+impl<'a, T: IsioDataType> Accessor<'a, Vec<u8>> for LocalImage<'a, T> {
+    type DTYPE = T;
+
+    unsafe fn image(&self) -> &Image<'a, Vec<u8>> {
+        &self._image
+    }
+
+    unsafe fn image_mut(&mut self) -> &mut Image<'a, Vec<u8>> {
+        &mut self._image
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn docs_example() -> Result<(), crate::Error>{
+        use super::prelude::*;
+        use rand::random;
+        // create a new image at `/dev/shm/noise.im.shm`
+        let mut image = match ShmImage::<f64>::create_new("noise", &[100, 100]) {
+            Ok(im) => im,
+            Err(_) => ShmImage::<f64>::open("noise")?,
+        };
+        // mutate the data in a loop:
+        for _ in 0..10 {
+            // set a random value for each pixel
+            unsafe { image.modify(|(_idx, value)| *value = random()) }.unwrap();
+            // post on all semaphores so that waiting processes are released
+            unsafe { image.sem_post_all() };
+            // sleep for a moment
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        Ok(())
     }
 }

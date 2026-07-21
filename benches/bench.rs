@@ -91,7 +91,7 @@ fn bench_modify_image(c: &mut Criterion) {
                     ShmImage::create_new(IMNAME, IMSHAPE).unwrap()
                 }
             };
-            let array = image.array_mut();
+            let array = unsafe { image.array_mut() };
             let start = Instant::now();
             for _ in 0..iters {
                 iter_mut_array(array);
@@ -109,7 +109,7 @@ fn bench_modify_image(c: &mut Criterion) {
                     ShmImage::create_new(IMNAME, IMSHAPE).unwrap()
                 }
             };
-            let array = image.array_mut();
+            let array = unsafe { image.array_mut() };
             let start = Instant::now();
             for _ in 0..iters {
                 par_iter_mut_array(array);

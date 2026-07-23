@@ -109,3 +109,41 @@ For example, a 6 by 8 by 10 image (`size=[6,8,10]`) with datatype `f64` (8 bytes
 and a total size of $86256$ Bytes in memory.
 
 It seems worth to note that if an image uses a 64-bit data type, and an even number of semaphores, the data will be tightly packed with no padding between sequential elements in memory. Many other conditions result in tightly packed data, so it is important to include some "odd" data dimensions and types to validate the implementation of this ISIO spec.
+
+### Image Metadata Layout
+
+Similarly, the image metadata structure has the following layout in memory:
+
+| item            | size (B) | pad (B) | offset (B) | comments                                                                     |
+| --------------- | -------- | ------- | ----------- | ---------------------------------------------------------------------------- |
+| version         | 32       | 0       | 0           | Image Struct version from ISIO, utf-8                                        |
+| name            | 80       | 0       | 32          | Image name, utf-8                                                            |
+| naxis           | 1        | 3       | 112         | Number of axes (u8)                                                          |
+| size            | 12       | 0       | 116         | Shape of image `[ u32 ; 3 ]`                                                 |
+| nelement        | 8        | 0       | 128         | Number of elements in the image                                              |
+| datatype        | 1        | 7       | 136         | enumeration of datatype (see `./src/datatypes.rs`)                           |
+| imagetype       | 8        | 0       | 144         | enumeration of image type (see `./src/datatypes.rs`)                         |
+| creationtime    | 16       | 0       | 152         | timestamp                                                                    |
+| lastaccesstime  | 16       | 0       | 168         | timestamp                                                                    |
+| atime           | 16       | 0       | 184         | timestamp                                                                    |
+| writetime       | 16       | 0       | 200         | timestamp                                                                    |
+| creator_pid     | 4        | 0       | 216         | pid of creator process                                                       |
+| owner_pid       | 4        | 0       | 220         | pid of current owner                                                         |
+| shared          | 1        | 7       | 224         | is the stream in shared memory?                                              |
+| inode           | 8        | 0       | 232         | inode number if shared memory                                                |
+| location        | 1        | 0       | 240         | -1 if in CPU memory, >=0 if in GPU memory on `location` device               |
+| status          | 1        | 6       | 241         | 1 to log image (default); 0 : do not log: 2 : stop log (then goes back to 2) |
+| flag            | 8        | 0       | 248         | bitmask, encodes read/write permissions.... NOTE: enum instead of defines    |
+| logflag         | 1        | 1       | 256         | set to 1 to start logging                                                    |
+| sem             | 2        | 0       | 258         | number of semaphores supported, specified at image creation                  |
+| nb_proc_trace   | 2        | 2       | 260         | number of streamproctrace entries                                            |
+| cnt0            | 8        | 0       | 264         | counter (incremented if image is updated)                                    |
+| cnt1            | 8        | 0       | 272         | in 3D rolling buffer image, this is the last slice written                   |
+| cnt2            | 8        | 0       | 280         | in cnt2-based syncronization, proceed until cnt0=cnt2                        |
+| write           | 1        | 1       | 288         | 1 if image is being written                                                  |
+| nb_kw           | 2        | 0       | 290         | number of keywords (max: 65536)                                              |
+| cb_size         | 4        | 0       | 292         | circular buffer size (number of images to store in buffer)                   |
+| cb_index        | 4        | 4       | 296         | current index of circular buffer                                             |
+| cb_cycle        | 8        | 0       | 304         | ?                                                                            |
+| imdatamemsize   | 8        | 0       | 312         | total size (in Bytes) of image data in memory                                |
+| cuda_mem_handle | 64       | 0       | 320         | handle to cuda device memory?                                                |

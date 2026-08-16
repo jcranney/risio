@@ -52,9 +52,9 @@
 //!     std::thread::sleep(std::time::Duration::from_millis(1));
 //! }
 //! ```
-//! 
+//!
 //! Connecting to an existing shared memory image and waiting on the semaphore:
-//! ``` 
+//! ```
 //! use risio::prelude::*;
 //! let mut image: ShmImage<f64> = ShmImage::open("noise").unwrap();
 //! unsafe { image.sem_flush(0) };
@@ -96,22 +96,17 @@ use crate::imagestreamio::{
 };
 
 pub mod prelude {
-    pub use crate::{Accessor, ShmImage, LocalImage};
+    pub use crate::{RawAccessor, Accessor, LocalImage, ShmImage};
 }
 
-/// A type that implements Accessor attempts a form of "interior mutability",
-/// where interaction with shared memory is restricted to a handful of
-/// well-considered methods. By restricting the shared-memory
-/// interaction to methods provided by Accessor, the chances of accidental
-/// race conditions and improper implementation are greatly reduced, but since
-/// the user requires fast access to shared memory, it's unlikely that any
-/// implementation can ever be truly "safe".
-pub trait Accessor<'a, T>
+/// A raw accessor is not type-aware, and is something like a "mid-level"
+/// abstraction. In most cases, you will want to use the `Accessor` trait
+/// instead, but this can be useful if you are developping a bytes-oriented
+/// interface around a shared-memory image.
+pub trait RawAccessor<'a, T>
 where
     T: 'a,
 {
-    type DTYPE: IsioDataType;
-
     /// returns an Image object, which contains many `UnsafeCell`s that contain
     /// mutable references pointing to shared memory.
     unsafe fn image(&self) -> &Image<'a, T>;
@@ -121,65 +116,29 @@ where
     /// of this slice are directly mapped to the bytes in the shm image. This
     /// is still unsafe, since it is readily subject to race conditions from
     /// other processes.
-    unsafe fn array(&'a self) -> &'a [Self::DTYPE] {
-        Self::DTYPE::from_bytes(unsafe { self.image().array })
+    unsafe fn bytes(&'a self) -> &'a [u8] {
+        <u8>::from_bytes(unsafe { self.image().array })
+    }
+
+    /// Returns the memory mapped image data as a mutable slice. The elements of
+    /// this slice are directly mapped to the bytes in the shm image. This is
+    /// the least-safe way to access image data, as it requires you to manage
+    /// the "md.write" flag.
+    unsafe fn bytes_mut(&'a mut self) -> &'a mut [u8] {
+        <u8>::from_bytes_mut(unsafe { self.image_mut().array })
     }
 
     /// formatted name from Image MetaData
-    unsafe fn name(&self) -> String {
+    unsafe fn name(&'a self) -> String {
         self.metadata()
             .name
+            .clone()
             .iter()
             .map_while(|x| match x {
                 0 => None,
                 x => Some(*x as u8 as char),
             })
-            .collect()
-    }
-
-    /// Modify shared memory data in-place by passing a closure that mutates
-    /// the existing element, possibly using the index of that element in it's
-    /// computation which is the first argument of the closure.
-    unsafe fn modify<F>(&mut self, f: F) -> Result<(), Error>
-    where
-        F: Fn((usize, &mut Self::DTYPE)),
-    {
-        if { unsafe { self.image_mut().md.write } } != 0 {
-            return Err(Error::ImageIsBeingWritten(unsafe {
-                self.name().to_string()
-            }));
-        } else {
-            unsafe { self.image_mut().md.write = 1 };
-        }
-        let array: &mut [Self::DTYPE] =
-            Self::DTYPE::from_bytes_mut(unsafe { self.image_mut().array });
-        array.iter_mut().enumerate().for_each(f);
-        unsafe { self.image_mut().md.write = 0 };
-        Ok(())
-    }
-
-    #[cfg(feature = "rayon")]
-    /// Modify shared memory data in-place by passing a closure that mutates
-    /// the existing element, possibly using the index of that element in it's
-    /// computation which is the first argument of the closure.
-    unsafe fn par_modify<F>(&mut self, f: F) -> Result<(), Error>
-    where
-        F: Fn((usize, &mut Self::DTYPE)) + Sync + Send,
-    {
-        if unsafe { self.image_mut().md.write } != 0 {
-            return Err(Error::ImageIsBeingWritten(unsafe {
-                self.name().to_string()
-            }));
-        } else {
-            unsafe {
-                self.image_mut().md.write = 1;
-            }
-        }
-        let array: &mut [Self::DTYPE] =
-            Self::DTYPE::from_bytes_mut(unsafe { self.image_mut().array });
-        array.par_iter_mut().enumerate().for_each(f);
-        unsafe { self.image_mut().md.write = 0 };
-        Ok(())
+            .collect::<String>()
     }
 
     /// Typically used by the producer of an image to flag with the image
@@ -257,6 +216,38 @@ where
         }
     }
 
+    /// Returns a reference to the image metadata
+    fn metadata(&'a self) -> &'a ImageMetadata {
+        unsafe { self.image() }.md
+    }
+
+    /// Returns a mutable reference to the image metadata
+    fn metadata_mut(&'a mut self) -> &'a mut ImageMetadata {
+        unsafe { self.image_mut().md }
+    }
+}
+
+/// A type that implements Accessor attempts a form of "interior mutability",
+/// where interaction with shared memory is restricted to a handful of
+/// well-considered methods. By restricting the shared-memory
+/// interaction to methods provided by Accessor, the chances of accidental
+/// race conditions and improper implementation are greatly reduced, but since
+/// the user requires fast access to shared memory, it's unlikely that any
+/// implementation can ever be truly "safe".
+pub trait Accessor<'a, T>: RawAccessor<'a, T>
+where
+    T: 'a,
+{
+    type DTYPE: IsioDataType;
+
+    /// Returns the memory mapped image data as an immutable slice. The elements
+    /// of this slice are directly mapped to the bytes in the shm image. This
+    /// is still unsafe, since it is readily subject to race conditions from
+    /// other processes.
+    unsafe fn array(&'a self) -> &'a [Self::DTYPE] {
+        Self::DTYPE::from_bytes(unsafe { self.image().array })
+    }
+
     /// Returns the memory mapped image data as a mutable slice. The elements of
     /// this slice are directly mapped to the bytes in the shm image. This is
     /// the least-safe way to access image data, as it requires you to manage
@@ -265,9 +256,49 @@ where
         Self::DTYPE::from_bytes_mut(unsafe { self.image_mut().array })
     }
 
-    /// Returns a clone of the ImageMetadata.
-    fn metadata(&self) -> ImageMetadata {
-        unsafe { self.image().md.clone() }
+    /// Modify shared memory data in-place by passing a closure that mutates
+    /// the existing element, possibly using the index of that element in it's
+    /// computation which is the first argument of the closure.
+    unsafe fn modify<F>(&'a mut self, f: F) -> Result<(), Error>
+    where
+        F: Fn((usize, &mut Self::DTYPE)),
+    {
+        if { unsafe { self.image_mut().md.write } } != 0 {
+            return Err(Error::ImageIsBeingWritten(unsafe {
+                self.name().to_string()
+            }));
+        } else {
+            unsafe { self.image_mut().md.write = 1 };
+        }
+        let array: &mut [Self::DTYPE] =
+            Self::DTYPE::from_bytes_mut(unsafe { self.image_mut().array });
+        array.iter_mut().enumerate().for_each(f);
+        unsafe { self.image_mut().md.write = 0 };
+        Ok(())
+    }
+
+    #[cfg(feature = "rayon")]
+    /// Modify shared memory data in-place by passing a closure that mutates
+    /// the existing element, possibly using the index of that element in it's
+    /// computation which is the first argument of the closure.
+    unsafe fn par_modify<F>(&'a mut self, f: F) -> Result<(), Error>
+    where
+        F: Fn((usize, &mut Self::DTYPE)) + Sync + Send,
+    {
+        if unsafe { self.image_mut().md.write } != 0 {
+            return Err(Error::ImageIsBeingWritten(unsafe {
+                self.name().to_string()
+            }));
+        } else {
+            unsafe {
+                self.image_mut().md.write = 1;
+            }
+        }
+        let array: &mut [Self::DTYPE] =
+            Self::DTYPE::from_bytes_mut(unsafe { self.image_mut().array });
+        array.par_iter_mut().enumerate().for_each(f);
+        unsafe { self.image_mut().md.write = 0 };
+        Ok(())
     }
 }
 
@@ -322,8 +353,8 @@ impl<'a, T: IsioDataType> ShmImage<'a, T> {
     }
 }
 
-impl<'a, T: IsioDataType> Accessor<'a, MmapMut> for ShmImage<'a, T> {
-    type DTYPE = T;
+impl<'a, T: IsioDataType> RawAccessor<'a, MmapMut> for ShmImage<'a, T> {
+    // type DTYPE = T;
 
     unsafe fn image(&self) -> &Image<'a, MmapMut> {
         &self._image
@@ -332,6 +363,10 @@ impl<'a, T: IsioDataType> Accessor<'a, MmapMut> for ShmImage<'a, T> {
     unsafe fn image_mut(&mut self) -> &mut Image<'a, MmapMut> {
         &mut self._image
     }
+}
+
+impl<'a, T: IsioDataType> Accessor<'a, MmapMut> for ShmImage<'a, T> {
+    type DTYPE = T;
 }
 
 pub struct LocalImage<'a, T: IsioDataType> {
@@ -352,8 +387,8 @@ impl<'a, T: IsioDataType> LocalImage<'a, T> {
     }
 }
 
-impl<'a, T: IsioDataType> Accessor<'a, Vec<u8>> for LocalImage<'a, T> {
-    type DTYPE = T;
+impl<'a, T: IsioDataType> RawAccessor<'a, Vec<u8>> for LocalImage<'a, T> {
+    // type DTYPE = T;
 
     unsafe fn image(&self) -> &Image<'a, Vec<u8>> {
         &self._image
@@ -363,11 +398,14 @@ impl<'a, T: IsioDataType> Accessor<'a, Vec<u8>> for LocalImage<'a, T> {
         &mut self._image
     }
 }
+impl<'a, T: IsioDataType> Accessor<'a, Vec<u8>> for LocalImage<'a, T> {
+    type DTYPE = T;
+}
 
 #[cfg(test)]
 mod tests {
     #[test]
-    fn docs_example() -> Result<(), crate::Error>{
+    fn docs_example() -> Result<(), crate::Error> {
         use super::prelude::*;
         use rand::random;
         // create a new image at `/dev/shm/noise.im.shm`

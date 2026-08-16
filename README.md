@@ -1,17 +1,24 @@
 # `risio`
 
-The goal of this project is to wrap the main components of ImageStreamIO somehow in rust. My goal is to get to a point where I can write a simple rust program that:
+The goal of this project is to provide a rust interface to shared memory images,
+as per the [ImageStreamIO](https://github.com/milk-org/ImageStreamIO) specification.
 
-- opens two ImageSteamIO shared memory object,
-- waits for the first object to be updated,
-- performs a computation on that object,
-- writes the result back to the second object.
 
-I'm sure this will be non-trivial, due to all of the rust safety guarantees seeming to be at odds with direct `shm` interaction, but let's see.
+The API is unstable, but usable. I'm using it already for hobby instrumentation
+projects. The most basic functionality of ISIO exists now in this rust crate, 
+but there are missing features and probably some sub-optimal structural
+choices that will be chopped and changed without much warning. Once I'm happy with
+an interface, I'll stabilise the crate, but that is probably still many months away.
+
+
+This is a work-related hobby project for me, so is not a high priority. If you'd
+like to contribute feel free to reach out or create a pull request/issue. If you'd
+like to help but don't know where to start, I'll find you
+something suited to your skill level to work on. There is plenty to be done.
 
 ## Status
 
-- There are now no dependencies on external C ImageStreamIO, simplifying the build and install significantly,
+- There are now no dependencies on external C ImageStreamIO, simplifying the build, install, and distribution significantly,
 - Currently fleshing out an "as safe as possible" unsafe interface on the underlying memory mapped data. See:
   - `./src/lib.rs`
 - Basic shared memory access and semaphore posting/waiting is working, but thoroughly under-tested. Try executing:
